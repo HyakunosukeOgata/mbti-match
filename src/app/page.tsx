@@ -1,65 +1,82 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useApp } from '@/lib/store';
+import { useState, useEffect } from 'react';
+import { Sparkles } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+
+export default function LoginPage() {
+  const { isLoggedIn, login, currentUser, onboardingStep } = useApp();
+  const [name, setName] = useState('');
+  const router = useRouter();
+
+  // 已登入 → 導向對應頁面
+  useEffect(() => {
+    if (isLoggedIn && currentUser?.onboardingComplete) {
+      router.replace('/home');
+    } else if (isLoggedIn && onboardingStep >= 1) {
+      router.replace('/onboarding/mbti');
+    }
+  }, [isLoggedIn, currentUser, onboardingStep, router]);
+
+  const handleLogin = (loginName?: string) => {
+    const finalName = loginName || name.trim();
+    if (!finalName) return;
+    login(finalName);
+  };
+
+  if (isLoggedIn) return null;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-dvh flex flex-col items-center justify-center px-6">
+      {/* Logo */}
+      <div className="mb-10 text-center animate-slide-up">
+        <div
+          className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 bg-primary"
+        >
+          <Sparkles size={28} color="white" />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <h1 className="text-2xl font-bold mb-1">MBTI Match</h1>
+        <p className="text-text-secondary text-sm">用性格，找到對的人</p>
+      </div>
+
+      {/* 登入表單 */}
+      <div className="w-full space-y-4 animate-slide-up" style={{ animationDelay: '0.1s' }}>
+        <div>
+          <label className="text-sm text-text-secondary mb-2 block">你的暱稱</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+            placeholder="輸入你的暱稱"
+            className="w-full"
+          />
         </div>
-      </main>
+
+        <button className="btn-primary" onClick={() => handleLogin()} disabled={!name.trim()}>
+          開始配對之旅
+        </button>
+
+        <div className="text-center space-y-3 pt-4">
+          <p className="text-text-secondary text-xs">或使用以下方式登入</p>
+          <div className="flex gap-3 justify-center">
+            <button className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm" onClick={() => handleLogin('Demo 用戶')}>
+              手機
+            </button>
+            <button className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm" onClick={() => handleLogin('Gmail 用戶')}>
+              Gmail
+            </button>
+            <button className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm" onClick={() => handleLogin('Apple 用戶')}>
+              Apple
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <p className="text-text-secondary text-xs mt-8 text-center">
+        登入即表示你同意我們的服務條款和隱私政策
+      </p>
     </div>
   );
 }
