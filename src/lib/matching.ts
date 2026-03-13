@@ -105,6 +105,9 @@ export function passesBasicFilters(me: UserProfile, other: UserProfile): boolean
   
   // 年齡範圍
   if (other.age < me.preferences.ageMin || other.age > me.preferences.ageMax) return false;
+
+  // 地區
+  if (me.preferences.region && other.preferences?.region && me.preferences.region !== other.preferences.region) return false;
   
   return true;
 }
@@ -145,17 +148,55 @@ export function getSharedAnswers(me: UserProfile, other: UserProfile): SharedAns
 }
 
 /**
- * 從候選人中選出今日 5 張卡片
+ * 每人每天最多被推薦的次數上限
+ * 防止少數方被所有人重複消耗
  */
-export function getDailyMatches(me: UserProfile, candidates: UserProfile[]): UserProfile[] {
+const DAILY_EXPOSURE_LIMIT = 10;
+const DAILY_MATCH_COUNT = 5;
+
+// 全域曝光計數器（實際產品用 DB，這裡用 Map 模擬）
+const dailyExposure = new Map<string, number>();
+let lastResetDate = '';
+
+function getExposureCount(userId: string): number {
+  const today = new Date().toDateString();
+  if (today !== lastResetDate) {
+    dailyExposure.clear();
+    lastResetDate = today;
+  }
+  return dailyExposure.get(userId) || 0;
+}
+
+function incrementExposure(userId: string): void {
+  const current = getExposureCount(userId);
+  dailyExposure.set(userId, current + 1);
+}
+
+/**
+ * 從候選人中選出今日卡片（配額制）
+ * 每人每天最多被推薦 DAILY_EXPOSURE_LIMIT 次
+ * excludeIds: 已喜歡或已配對的用戶 ID，不再顯示
+ */
+export function getDailyMatches(
+  me: UserProfile,
+  candidates: UserProfile[],
+  excludeIds: string[] = []
+): UserProfile[] {
+  const excludeSet = new Set(excludeIds);
   const eligible = candidates
     .filter(c => c.id !== me.id && c.onboardingComplete && passesBasicFilters(me, c))
+    .filter(c => !excludeSet.has(c.id))
+    .filter(c => getExposureCount(c.id) < DAILY_EXPOSURE_LIMIT)
     .map(c => ({
       user: c,
-      score: calculateCompatibility(me, c)
+      score: calculateCompatibility(me, c) + (Math.random() * 5) // Add small random factor for variety
     }))
     .sort((a, b) => b.score - a.score);
-  
-  // 取前 5 名
-  return eligible.slice(0, 5).map(e => e.user);
+
+  const result = eligible.slice(0, DAILY_MATCH_COUNT).map(e => e.user);
+
+  // 更新曝光計數
+  result.forEach(u => incrementExposure(u.id));
+
+  return result;
 }

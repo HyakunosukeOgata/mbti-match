@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { scenarioQuestions } from '@/lib/mock-data';
 import { ScenarioAnswer } from '@/lib/types';
 import { ArrowRight, User, Users } from 'lucide-react';
+import { track } from '@/lib/analytics';
 
 export default function ScenariosPage() {
   const { currentUser, updateProfile, setOnboardingStep } = useApp();
@@ -24,11 +25,16 @@ export default function ScenariosPage() {
     }
   }, [currentUser, router]);
 
+  useEffect(() => {
+    if (currentUser && currentQ >= week1Questions.length) {
+      router.push('/onboarding/profile');
+    }
+  }, [currentQ, currentUser, router, week1Questions.length]);
+
   if (!currentUser) return null;
 
   const question = week1Questions[currentQ];
   if (!question) {
-    router.push('/onboarding/profile');
     return null;
   }
 
@@ -75,45 +81,40 @@ export default function ScenariosPage() {
 
   return (
     <div className="min-h-dvh flex flex-col px-6 py-8">
-      {/* 進度條 */}
+      {/* Progress */}
       <div className="mb-6">
-        <div className="flex justify-between items-center mb-2">
-          <p className="text-sm text-text-secondary">步驟 2/3 — 情境題</p>
-          <span className="text-xs text-text-secondary">
+        <div className="flex justify-between items-center mb-3">
+          <p className="text-sm font-medium text-text-secondary">💭 步驟 2/3 · 情境題</p>
+          <span className="pill pill-primary">
             {currentQ + 1} / {week1Questions.length}
           </span>
         </div>
-        <div className="w-full h-2 bg-bg-card rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-300 bg-accent"
-            style={{
-              width: `${progress}%`,
-            }}
-          />
+        <div className="progress-bar">
+          <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
         </div>
       </div>
 
-      {/* 角色標示 */}
+      {/* Phase indicator */}
       <div className="flex items-center gap-2 mb-4 animate-fade-in" key={phase}>
         {phase === 'my' ? (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/20 text-primary-light text-sm font-medium">
+          <div className="pill pill-primary flex items-center gap-2 !py-2 !px-4">
             <User size={16} />
-            你會怎麼做？
+            🙋 你的選擇
           </div>
         ) : (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/20 text-accent-light text-sm font-medium">
+          <div className="pill pill-accent flex items-center gap-2 !py-2 !px-4">
             <Users size={16} />
-            你希望對方怎麼做？
+            💕 你希望對方的選擇
           </div>
         )}
       </div>
 
-      {/* 題目 */}
+      {/* Question */}
       <div className="flex-1 animate-slide-up" key={`${currentQ}-${phase}`}>
-        <div className="card mb-4">
-          <p className="text-xs text-text-secondary mb-1">{question.category}</p>
+        <div className="card mb-4 !border-none" style={{ background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.06), rgba(244, 63, 94, 0.04))' }}>
+          <p className="text-xs font-semibold text-primary mb-1">{question.category}</p>
           <h2 className="text-lg font-bold">{question.question}</h2>
-          <p className="text-xs text-accent-light mt-2">可複選</p>
+          <p className="text-xs text-accent mt-2">可複選 ✨</p>
         </div>
 
         <div className="space-y-3">
@@ -123,9 +124,9 @@ export default function ScenariosPage() {
               className={`option-card flex items-center gap-3 ${selectedValues.includes(idx) ? 'selected' : ''}`}
               onClick={() => toggleOption(idx)}
             >
-              <span className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0" style={{
+              <span className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all" style={{
                 borderColor: selectedValues.includes(idx) ? 'var(--primary)' : 'var(--border)',
-                background: selectedValues.includes(idx) ? 'var(--primary)' : 'transparent',
+                background: selectedValues.includes(idx) ? 'linear-gradient(135deg, #7C3AED, #F43F5E)' : 'transparent',
               }}>
                 {selectedValues.includes(idx) && <span className="text-white text-xs">✓</span>}
               </span>
@@ -135,14 +136,12 @@ export default function ScenariosPage() {
         </div>
       </div>
 
-      {/* 下一步 */}
       <button
         className="btn-primary flex items-center justify-center gap-2 mt-6"
         onClick={handleNext}
         disabled={selectedValues.length === 0}
       >
-        {phase === 'my' ? '接下來：你希望對方怎麼做' : currentQ < week1Questions.length - 1 ? '下一題' : '完成情境題'}
-        <ArrowRight size={18} />
+        {phase === 'my' ? '接下來：對方的理想選擇 →' : currentQ < week1Questions.length - 1 ? '下一題 →' : '完成情境題 ✅'}
       </button>
     </div>
   );

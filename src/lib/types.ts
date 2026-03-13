@@ -1,5 +1,5 @@
 // ============================
-// MBTI Match - Type Definitions
+// Mochi 默契 - Type Definitions
 // ============================
 
 export type MBTIDimension = 'EI' | 'SN' | 'TF' | 'JP';
@@ -52,6 +52,7 @@ export interface DailyCard {
   topic: ConversationTopic;
   expiresAt: string; // ISO date
   liked: boolean;
+  skipped?: boolean;
   topicAnswer?: string;
 }
 

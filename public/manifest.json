@@ -1,0 +1,61 @@
+{
+  "name": "Mochi 默契 — MBTI 配對交友",
+  "short_name": "Mochi 默契",
+  "description": "基於 MBTI 人格特質的智慧配對交友平台",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF5FF",
+  "theme_color": "#7C3AED",
+  "orientation": "portrait",
+  "lang": "zh-TW",
+  "id": "/",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icons/icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["social", "lifestyle", "dating"],
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "今日推薦",
+      "short_name": "探索",
+      "url": "/home",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "我的配對",
+      "short_name": "配對",
+      "url": "/matches",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
