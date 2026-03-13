@@ -2,7 +2,7 @@ name: Deploy Legal Pages
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths: ['public-legal/**']
   workflow_dispatch:
 
