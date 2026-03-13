@@ -39,12 +39,12 @@ export default function WeeklyPage() {
     return (
       <div className="min-h-dvh pb-24">
         <div className="px-6 pt-6">
-          <h1 className="text-2xl font-extrabold mb-2">
+          <h1 className="text-2xl font-bold mb-2">
             <span className="gradient-text">每週情境題</span> ✨
           </h1>
         </div>
         <div className="flex flex-col items-center justify-center py-20 px-6 animate-scale-in">
-          <div className="w-20 h-20 rounded-full flex items-center justify-center mb-5" style={{ background: 'rgba(16, 185, 129, 0.1)' }}>
+          <div className="w-20 h-20 rounded-full flex items-center justify-center mb-5 animate-float" style={{ background: 'rgba(16, 185, 129, 0.1)' }}>
             <CheckCircle size={40} className="text-success" />
           </div>
           <h2 className="text-xl font-bold mb-2">
@@ -69,12 +69,12 @@ export default function WeeklyPage() {
     return (
       <div className="min-h-dvh pb-24">
         <div className="px-6 pt-6">
-          <h1 className="text-2xl font-extrabold mb-2">
+          <h1 className="text-2xl font-bold mb-2">
             <span className="gradient-text">每週情境題</span> ✨
           </h1>
         </div>
         <div className="flex flex-col items-center justify-center py-20 px-6 animate-scale-in">
-          <div className="w-20 h-20 rounded-full flex items-center justify-center mb-5" style={{ background: 'rgba(16, 185, 129, 0.1)' }}>
+          <div className="w-20 h-20 rounded-full flex items-center justify-center mb-5 animate-float" style={{ background: 'rgba(16, 185, 129, 0.1)' }}>
             <CheckCircle size={40} className="text-success" />
           </div>
           <h2 className="text-xl font-bold mb-2">全部完成！🏆</h2>
@@ -131,7 +131,7 @@ export default function WeeklyPage() {
   return (
     <div className="min-h-dvh flex flex-col pb-24">
       <div className="px-6 pt-6 pb-4">
-        <h1 className="text-2xl font-extrabold mb-1">
+        <h1 className="text-2xl font-bold mb-1">
           <span className="gradient-text">每週情境題</span> ✨
         </h1>
         <div className="flex justify-between items-center">
@@ -167,17 +167,17 @@ export default function WeeklyPage() {
       </div>
 
       <div className="flex-1 px-6 animate-slide-up" key={`${currentQ}-${phase}`}>
-        <div className="card mb-4" style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.06), rgba(244,63,94,0.06))', border: 'none' }}>
+        <div className="card mb-4" style={{ background: 'linear-gradient(135deg, rgba(232,132,44,0.06), rgba(255,107,107,0.06))', border: 'none' }}>
           <p className="text-xs text-text-secondary mb-1">{question.category}</p>
-          <h2 className="text-lg font-bold">{question.question}</h2>
+          <h2 className="text-lg font-bold">{phase === 'partner' ? question.partnerQuestion : question.question}</h2>
           <p className="text-xs mt-2" style={{ color: 'var(--accent)' }}>可複選 ✅</p>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-3 stagger-children">
           {question.options.map((option, idx) => (
             <button
               key={idx}
-              className={`option-card flex items-center gap-3 ${selectedValues.includes(idx) ? 'selected' : ''}`}
+              className={`option-card flex items-center gap-3 animate-slide-up ${selectedValues.includes(idx) ? 'selected' : ''}`}
               onClick={() => toggleOption(idx)}
             >
               <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style={{

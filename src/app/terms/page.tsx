@@ -16,7 +16,7 @@ export default function TermsPage() {
         <span className="text-sm">返回</span>
       </button>
 
-      <h1 className="text-2xl font-extrabold mb-6">
+      <h1 className="text-2xl font-bold mb-6">
         <span className="gradient-text">服務條款</span>
       </h1>
 

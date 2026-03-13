@@ -10,7 +10,9 @@ export function calculateCompatibility(me: UserProfile, other: UserProfile): num
   const mbtiScore = calculateMBTICompatibility(me, other);
   
   // 情境題佔 70%，MBTI 佔 30%
-  return Math.round(scenarioScore * 0.7 + mbtiScore * 0.3);
+  const raw = Math.round(scenarioScore * 0.7 + mbtiScore * 0.3);
+  // 最低 35%，不灌水，真實呈現兼容度
+  return Math.max(35, Math.min(100, raw));
 }
 
 /**
@@ -106,8 +108,12 @@ export function passesBasicFilters(me: UserProfile, other: UserProfile): boolean
   // 年齡範圍
   if (other.age < me.preferences.ageMin || other.age > me.preferences.ageMax) return false;
 
-  // 地區
-  if (me.preferences.region && other.preferences?.region && me.preferences.region !== other.preferences.region) return false;
+  // 地區：如果用戶設定了偏好地區，對方必須在其中
+  if (me.preferences.preferredRegions && me.preferences.preferredRegions.length > 0) {
+    if (other.preferences?.region && !me.preferences.preferredRegions.includes(other.preferences.region)) {
+      return false;
+    }
+  }
   
   return true;
 }
@@ -189,7 +195,7 @@ export function getDailyMatches(
     .filter(c => getExposureCount(c.id) < DAILY_EXPOSURE_LIMIT)
     .map(c => ({
       user: c,
-      score: calculateCompatibility(me, c) + (Math.random() * 5) // Add small random factor for variety
+      score: calculateCompatibility(me, c) + (Math.random() * 3) // 小幅隨機增加多樣性
     }))
     .sort((a, b) => b.score - a.score);
 

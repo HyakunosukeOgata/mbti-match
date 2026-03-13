@@ -15,7 +15,7 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="bottom-nav">
+    <nav className="bottom-nav" aria-label="主導航列">
       {navItems.map((item) => {
         const isActive = pathname.startsWith(item.href);
         return (

@@ -6,7 +6,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ConsentBanner } from "@/components/ConsentBanner";
 
 export const viewport: Viewport = {
-  themeColor: "#7C3AED",
+  themeColor: "#E8842C",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",

@@ -32,6 +32,9 @@ const dimensions = [
 
 const strengths: MBTIStrength[] = [50, 75, 100];
 
+const dimColors = ['#818CF8', '#38BDF8', '#FF6B6B', '#10B981'];
+const dimEmojis = ['💜', '💙', '❤️', '💚'];
+
 export default function MBTIPage() {
   const { currentUser, updateProfile, setOnboardingStep } = useApp();
   const router = useRouter();
@@ -77,8 +80,9 @@ export default function MBTIPage() {
     if (currentDim < 3) {
       setCurrentDim(currentDim + 1);
     } else {
-      // 完成 MBTI 設定
-      updateProfile({ mbti });
+      // 完成 MBTI 設定 — compute full code
+      const fullCode = mbti.EI.type + mbti.SN.type + mbti.TF.type + mbti.JP.type;
+      updateProfile({ mbti, mbtiCode: fullCode });
       setOnboardingStep(2);
       router.push('/onboarding/scenarios');
     }
@@ -90,33 +94,36 @@ export default function MBTIPage() {
     }
   };
 
-  const mbtiCode = mbti.EI.type + mbti.SN.type + mbti.TF.type + mbti.JP.type;
+  // Build incremental MBTI code: only show dimensions that have been visited
+  const mbtiLetters = [mbti.EI.type, mbti.SN.type, mbti.TF.type, mbti.JP.type];
+  const mbtiCode = mbtiLetters.slice(0, currentDim + 1).join('');
 
   return (
-    <div className="min-h-dvh flex flex-col px-6 py-8 relative overflow-hidden">
-      {/* Background decoration */}
-      <div className="absolute top-0 right-0 w-48 h-48 rounded-full opacity-10 pointer-events-none" style={{ background: 'radial-gradient(circle, #EC4899, transparent 70%)' }} />
+    <div className="min-h-dvh flex flex-col px-6 py-8 relative overflow-hidden transition-colors duration-500">
+      {/* Background decoration — color shifts per dimension */}
+      <div className="absolute top-0 right-0 w-48 h-48 rounded-full opacity-10 pointer-events-none transition-all duration-700" style={{ background: `radial-gradient(circle, ${dimColors[currentDim]}, transparent 70%)` }} />
+      <div className="absolute bottom-20 left-0 w-32 h-32 rounded-full opacity-[0.06] pointer-events-none transition-all duration-700" style={{ background: `radial-gradient(circle, ${dimColors[(currentDim + 2) % 4]}, transparent 70%)` }} />
 
       {/* Progress */}
       <div className="mb-8">
         <div className="flex justify-between items-center mb-3">
           <p className="text-sm font-medium text-text-secondary">🧠 步驟 1/3 · MBTI 人格</p>
-          <span className="mbti-badge">{mbtiCode}</span>
+          <span className="mbti-badge text-base tracking-widest">{mbtiCode}<span className="opacity-20">{'_'.repeat(4 - mbtiCode.length)}</span></span>
         </div>
         <div className="progress-bar">
           <div className="progress-bar-fill" style={{ width: `${((currentDim + 1) / 4) * 33}%` }} />
         </div>
         <div className="flex justify-between mt-2">
           {[0,1,2,3].map(i => (
-            <div key={i} className={`w-2 h-2 rounded-full transition-all ${i <= currentDim ? 'bg-primary' : 'bg-border'}`} style={{ boxShadow: i === currentDim ? '0 0 8px rgba(124,58,237,0.4)' : 'none' }} />
+            <div key={i} className={`w-2 h-2 rounded-full transition-all ${i <= currentDim ? 'bg-primary' : 'bg-border'}`} style={{ boxShadow: i === currentDim ? '0 0 8px rgba(232,132,44,0.4)' : 'none' }} />
           ))}
         </div>
       </div>
 
       {/* Dimension selection */}
       <div className="flex-1 animate-slide-up" key={currentDim}>
-        <h2 className="text-2xl font-extrabold mb-1">
-          <span className="gradient-text">第 {currentDim + 1} 維度</span>
+        <h2 className="text-2xl font-bold mb-1">
+          <span className="gradient-text">{dimEmojis[currentDim]} 第 {currentDim + 1} 維度</span>
         </h2>
         <p className="text-text-secondary text-sm mb-6">
           你覺得自己比較偏向哪一邊？
@@ -127,7 +134,7 @@ export default function MBTIPage() {
             className={`option-card flex items-start gap-3 ${currentValue.type === dim.left.code ? 'selected' : ''}`}
             onClick={() => selectType(dim.left.code)}
           >
-            <span className="text-2xl font-extrabold gradient-text">{dim.left.code}</span>
+            <span className="text-2xl font-bold gradient-text">{dim.left.code}</span>
             <div>
               <p className="font-bold">{dim.left.label}</p>
               <p className="text-sm text-text-secondary">{dim.left.desc}</p>
@@ -138,7 +145,7 @@ export default function MBTIPage() {
             className={`option-card flex items-start gap-3 ${currentValue.type === dim.right.code ? 'selected' : ''}`}
             onClick={() => selectType(dim.right.code)}
           >
-            <span className="text-2xl font-extrabold text-accent">{dim.right.code}</span>
+            <span className="text-2xl font-bold text-accent">{dim.right.code}</span>
             <div>
               <p className="font-bold">{dim.right.label}</p>
               <p className="text-sm text-text-secondary">{dim.right.desc}</p>
@@ -170,7 +177,7 @@ export default function MBTIPage() {
             上一步
           </button>
         )}
-        <button className="btn-primary flex-1 flex items-center justify-center gap-2" onClick={handleNext}>
+        <button className={`btn-primary flex-1 flex items-center justify-center gap-2 ${currentDim === 3 ? 'animate-pulse-ring' : ''}`} onClick={handleNext}>
           {currentDim < 3 ? '下一個維度 →' : '完成 MBTI ✅'}
         </button>
       </div>

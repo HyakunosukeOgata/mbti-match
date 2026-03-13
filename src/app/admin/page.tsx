@@ -9,9 +9,16 @@ import {
 } from 'lucide-react';
 
 // ============================
-// 簡單存取碼驗證
+// 存取碼驗證（SHA-256 hash，不在前端明文暴露密碼）
 // ============================
-const ADMIN_CODE = 'mochi2026';
+async function hashCode(code: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(code);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+// SHA-256 of admin code
+const ADMIN_HASH = 'eb6484e02140e990dd9e9d9193caecb3eee7a911891f37f26cc977575bf049ea';
 
 // ============================
 // Data helpers
@@ -87,16 +94,17 @@ export default function AdminPage() {
     return (
       <div style={styles.loginContainer}>
         <div style={styles.loginCard}>
-          <Shield size={40} color="#7C3AED" />
+          <Shield size={40} color="#E8842C" />
           <h1 style={styles.loginTitle}>Mochi 管理後台</h1>
           <p style={styles.loginSubtitle}>請輸入管理員存取碼</p>
           <input
             type="password"
             value={code}
             onChange={e => { setCode(e.target.value); setError(''); }}
-            onKeyDown={e => {
+            onKeyDown={async e => {
               if (e.key === 'Enter') {
-                if (code === ADMIN_CODE) setAuthed(true);
+                const h = await hashCode(code);
+                if (h === ADMIN_HASH) setAuthed(true);
                 else setError('存取碼錯誤');
               }
             }}
@@ -106,8 +114,9 @@ export default function AdminPage() {
           />
           {error && <p style={styles.error}>{error}</p>}
           <button
-            onClick={() => {
-              if (code === ADMIN_CODE) setAuthed(true);
+            onClick={async () => {
+              const h = await hashCode(code);
+              if (h === ADMIN_HASH) setAuthed(true);
               else setError('存取碼錯誤');
             }}
             style={styles.loginBtn}
@@ -134,12 +143,12 @@ export default function AdminPage() {
   const renderOverview = () => (
     <div>
       <div style={styles.statsGrid}>
-        <StatCard icon={<Users size={22} />} label="系統用戶" value={mockUsers.length + (currentUser ? 1 : 0)} color="#7C3AED" />
-        <StatCard icon={<Heart size={22} />} label="送出喜歡" value={likes.length} color="#F43F5E" />
+        <StatCard icon={<Users size={22} />} label="系統用戶" value={mockUsers.length + (currentUser ? 1 : 0)} color="#E8842C" />
+        <StatCard icon={<Heart size={22} />} label="送出喜歡" value={likes.length} color="#FF6B6B" />
         <StatCard icon={<MessageCircle size={22} />} label="配對數" value={matches.length} color="#0D9668" />
         <StatCard icon={<Activity size={22} />} label="訊息總數" value={totalMessages} color="#B27D00" />
         <StatCard icon={<BarChart3 size={22} />} label="分析事件" value={events.length} color="#6366F1" />
-        <StatCard icon={<TrendingUp size={22} />} label="今日卡片" value={dailyCards.length} color="#EC4899" />
+        <StatCard icon={<TrendingUp size={22} />} label="今日卡片" value={dailyCards.length} color="#F4A261" />
       </div>
 
       {currentUser && (
@@ -219,7 +228,7 @@ export default function AdminPage() {
                   <span>{user.preferences.region}</span>
                 </div>
               </div>
-              <Eye size={18} color="#A78BFA" />
+              <Eye size={18} color="#F4B183" />
             </div>
           ))}
         </div>
@@ -348,7 +357,7 @@ export default function AdminPage() {
                       </div>
                     )}
                   </div>
-                  <Eye size={18} color="#A78BFA" />
+                  <Eye size={18} color="#F4B183" />
                 </div>
               );
             })}
@@ -363,7 +372,7 @@ export default function AdminPage() {
             <div style={styles.userList}>
               {likes.map((like, i) => (
                 <div key={i} style={{ ...styles.userRow, cursor: 'default' }}>
-                  <Heart size={20} color="#F43F5E" fill="#F43F5E" />
+                  <Heart size={20} color="#FF6B6B" fill="#FF6B6B" />
                   <div style={styles.userInfo}>
                     <div style={styles.userName}>
                       {findUserName(like.fromUserId, currentUser)} → {findUserName(like.toUserId, currentUser)}
@@ -475,7 +484,7 @@ export default function AdminPage() {
     return (
       <div>
         <div style={styles.statsGrid}>
-          <StatCard icon={<Clock size={22} />} label="今日事件" value={today.length} color="#7C3AED" />
+          <StatCard icon={<Clock size={22} />} label="今日事件" value={today.length} color="#E8842C" />
           <StatCard icon={<TrendingUp size={22} />} label="本週事件" value={week.length} color="#0D9668" />
           <StatCard icon={<BarChart3 size={22} />} label="總事件" value={events.length} color="#6366F1" />
         </div>
@@ -605,75 +614,75 @@ function genderLabel(g: string) {
 // ============================
 const styles: Record<string, React.CSSProperties> = {
   // Login
-  loginContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100dvh', background: '#FAF5FF', padding: 20 },
-  loginCard: { background: '#fff', borderRadius: 20, padding: 40, textAlign: 'center', maxWidth: 360, width: '100%', boxShadow: '0 4px 24px rgba(124,58,237,0.08)' },
-  loginTitle: { fontSize: 22, fontWeight: 700, margin: '16px 0 4px', color: '#1E1B4B' },
-  loginSubtitle: { fontSize: 14, color: '#6B6190', margin: '0 0 20px' },
-  loginInput: { width: '100%', padding: '12px 16px', border: '2px solid #E9E5F5', borderRadius: 12, fontSize: 16, textAlign: 'center', outline: 'none' },
-  loginBtn: { width: '100%', padding: '12px 0', marginTop: 16, background: 'linear-gradient(135deg,#7C3AED,#EC4899)', color: '#fff', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 600, cursor: 'pointer' },
-  error: { color: '#EF4444', fontSize: 13, margin: '8px 0 0' },
+  loginContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100dvh', background: '#FFF8F0', padding: 20 },
+  loginCard: { background: '#fff', borderRadius: 20, padding: 40, textAlign: 'center', maxWidth: 360, width: '100%', boxShadow: '0 4px 24px rgba(232,132,44,0.08)' },
+  loginTitle: { fontSize: 22, fontWeight: 700, margin: '16px 0 4px', color: '#3D2C1E' },
+  loginSubtitle: { fontSize: 14, color: '#8B7355', margin: '0 0 20px' },
+  loginInput: { width: '100%', padding: '12px 16px', border: '2px solid #F0E6D8', borderRadius: 12, fontSize: 16, textAlign: 'center', outline: 'none' },
+  loginBtn: { width: '100%', padding: '12px 0', marginTop: 16, background: 'linear-gradient(135deg,#E8842C,#F4A261)', color: '#fff', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 600, cursor: 'pointer' },
+  error: { color: '#E55B5B', fontSize: 13, margin: '8px 0 0' },
 
   // Layout
-  container: { minHeight: '100dvh', background: '#F1ECF9' },
-  header: { background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  container: { minHeight: '100dvh', background: '#FFF3E8' },
+  header: { background: 'linear-gradient(135deg,#E8842C,#C56D1A)', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   headerLeft: { display: 'flex', alignItems: 'center', gap: 10 },
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: 700, margin: 0 },
   refreshBtn: { background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8, padding: 8, cursor: 'pointer', color: '#fff', display: 'flex' },
-  tabBar: { display: 'flex', background: '#fff', borderBottom: '1px solid #E9E5F5', overflowX: 'auto' },
-  tab: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px 8px', fontSize: 13, fontWeight: 500, color: '#6B6190', border: 'none', borderBottom: '3px solid transparent', background: 'none', cursor: 'pointer', whiteSpace: 'nowrap' },
-  tabActive: { color: '#7C3AED', borderBottomColor: '#7C3AED', fontWeight: 700 },
+  tabBar: { display: 'flex', background: '#fff', borderBottom: '1px solid #F0E6D8', overflowX: 'auto' },
+  tab: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px 8px', fontSize: 13, fontWeight: 500, color: '#8B7355', border: 'none', borderBottom: '3px solid transparent', background: 'none', cursor: 'pointer', whiteSpace: 'nowrap' },
+  tabActive: { color: '#E8842C', borderBottomColor: '#E8842C', fontWeight: 700 },
   main: { padding: 16, maxWidth: 800, margin: '0 auto' },
 
   // Stats
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginBottom: 20 },
   statCard: { background: '#fff', borderRadius: 16, padding: 16, textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' },
   statIcon: { width: 40, height: 40, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' },
-  statValue: { fontSize: 28, fontWeight: 800, color: '#1E1B4B' },
-  statLabel: { fontSize: 12, color: '#6B6190', marginTop: 2 },
+  statValue: { fontSize: 28, fontWeight: 800, color: '#3D2C1E' },
+  statLabel: { fontSize: 12, color: '#8B7355', marginTop: 2 },
 
   // Sections
   section: { marginTop: 20 },
-  sectionTitle: { fontSize: 16, fontWeight: 700, color: '#1E1B4B', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 },
+  sectionTitle: { fontSize: 16, fontWeight: 700, color: '#3D2C1E', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 },
 
   // Info card
   infoCard: { background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' },
-  infoRow: { fontSize: 14, padding: '6px 0', borderBottom: '1px solid #F3F0FF', color: '#1E1B4B' },
+  infoRow: { fontSize: 14, padding: '6px 0', borderBottom: '1px solid #FFF5EB', color: '#3D2C1E' },
 
   // User list
   userList: { display: 'flex', flexDirection: 'column', gap: 8 },
   userRow: { display: 'flex', alignItems: 'center', gap: 12, background: '#fff', borderRadius: 14, padding: '12px 16px', cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', transition: 'box-shadow 0.2s' },
   userAvatar: { flexShrink: 0 },
   avatarImg: { width: 44, height: 44, borderRadius: 12, objectFit: 'cover' },
-  avatarPlaceholder: { width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#A78BFA,#EC4899)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 18, flexShrink: 0 },
+  avatarPlaceholder: { width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#F4B183,#FF6B6B)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 18, flexShrink: 0 },
   userInfo: { flex: 1, minWidth: 0 },
-  userName: { fontSize: 15, fontWeight: 600, color: '#1E1B4B', display: 'flex', alignItems: 'center', gap: 8 },
-  userMeta: { fontSize: 12, color: '#6B6190', display: 'flex', gap: 8, marginTop: 2, flexWrap: 'wrap' },
-  youBadge: { fontSize: 10, background: '#7C3AED', color: '#fff', padding: '2px 8px', borderRadius: 6, fontWeight: 600 },
+  userName: { fontSize: 15, fontWeight: 600, color: '#3D2C1E', display: 'flex', alignItems: 'center', gap: 8 },
+  userMeta: { fontSize: 12, color: '#8B7355', display: 'flex', gap: 8, marginTop: 2, flexWrap: 'wrap' },
+  youBadge: { fontSize: 10, background: '#E8842C', color: '#fff', padding: '2px 8px', borderRadius: 6, fontWeight: 600 },
 
   // Detail
-  backBtn: { display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#7C3AED', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: '8px 0', marginBottom: 12 },
+  backBtn: { display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#E8842C', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: '8px 0', marginBottom: 12 },
   detailGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginTop: 12 },
   detailItem: { display: 'flex', flexDirection: 'column', gap: 2 },
-  detailItemLabel: { fontSize: 11, color: '#6B6190', fontWeight: 600, textTransform: 'uppercase' },
-  detailSection: { marginTop: 20, paddingTop: 16, borderTop: '1px solid #F3F0FF' },
-  detailLabel: { fontSize: 14, fontWeight: 600, color: '#1E1B4B', margin: '0 0 8px' },
-  bioText: { fontSize: 14, color: '#1E1B4B', lineHeight: 1.6, margin: 0, background: '#F3F0FF', padding: 12, borderRadius: 10 },
-  scenarioRow: { display: 'flex', gap: 12, fontSize: 12, color: '#6B6190', padding: '6px 10px', background: '#FAFAFA', borderRadius: 8 },
+  detailItemLabel: { fontSize: 11, color: '#8B7355', fontWeight: 600, textTransform: 'uppercase' },
+  detailSection: { marginTop: 20, paddingTop: 16, borderTop: '1px solid #FFF5EB' },
+  detailLabel: { fontSize: 14, fontWeight: 600, color: '#3D2C1E', margin: '0 0 8px' },
+  bioText: { fontSize: 14, color: '#3D2C1E', lineHeight: 1.6, margin: 0, background: '#FFF5EB', padding: 12, borderRadius: 10 },
+  scenarioRow: { display: 'flex', gap: 12, fontSize: 12, color: '#8B7355', padding: '6px 10px', background: '#FAFAFA', borderRadius: 8 },
 
   // MBTI
-  mbtiChip: { display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#F3F0FF', borderRadius: 10, padding: '8px 16px', minWidth: 56 },
+  mbtiChip: { display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#FFF5EB', borderRadius: 10, padding: '8px 16px', minWidth: 56 },
 
   // Badge
-  badge: { background: '#F3F0FF', color: '#7C3AED', padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 600 },
-  mono: { fontFamily: 'monospace', fontSize: 12, color: '#6B6190', wordBreak: 'break-all' },
-  emptyText: { color: '#A78BFA', fontSize: 13, fontStyle: 'italic' },
+  badge: { background: '#FFF5EB', color: '#E8842C', padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 600 },
+  mono: { fontFamily: 'monospace', fontSize: 12, color: '#8B7355', wordBreak: 'break-all' },
+  emptyText: { color: '#F4B183', fontSize: 13, fontStyle: 'italic' },
 
   // Chat
   chatContainer: { display: 'flex', flexDirection: 'column', gap: 8, background: '#F9F6FF', borderRadius: 16, padding: 16, maxHeight: 500, overflowY: 'auto' },
   chatBubble: { maxWidth: '85%', borderRadius: 16, padding: '10px 14px' },
-  chatSystem: { alignSelf: 'center', background: '#E9E5F5', color: '#6B6190', textAlign: 'center', fontSize: 13, borderRadius: 12, maxWidth: '90%' },
-  chatMine: { alignSelf: 'flex-end', background: '#7C3AED', color: '#fff' },
-  chatTheirs: { alignSelf: 'flex-start', background: '#fff', color: '#1E1B4B', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' },
+  chatSystem: { alignSelf: 'center', background: '#F0E6D8', color: '#8B7355', textAlign: 'center', fontSize: 13, borderRadius: 12, maxWidth: '90%' },
+  chatMine: { alignSelf: 'flex-end', background: '#E8842C', color: '#fff' },
+  chatTheirs: { alignSelf: 'flex-start', background: '#fff', color: '#3D2C1E', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' },
   chatSender: { fontSize: 11, fontWeight: 600, marginBottom: 2, opacity: 0.7 },
   chatText: { fontSize: 14, lineHeight: 1.5, wordBreak: 'break-word' },
   chatTime: { fontSize: 10, marginTop: 4, opacity: 0.6, textAlign: 'right' },
@@ -681,20 +690,20 @@ const styles: Record<string, React.CSSProperties> = {
   // Activity
   activityList: { display: 'flex', flexDirection: 'column', gap: 6 },
   activityItem: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '8px 12px', background: '#fff', borderRadius: 10 },
-  activityDot: { width: 8, height: 8, borderRadius: '50%', background: '#7C3AED', flexShrink: 0 },
-  activityName: { fontWeight: 600, color: '#1E1B4B' },
-  activityProps: { fontSize: 11, color: '#6B6190', fontFamily: 'monospace', flex: 1 },
-  activityTime: { fontSize: 11, color: '#A78BFA', whiteSpace: 'nowrap' },
+  activityDot: { width: 8, height: 8, borderRadius: '50%', background: '#E8842C', flexShrink: 0 },
+  activityName: { fontWeight: 600, color: '#3D2C1E' },
+  activityProps: { fontSize: 11, color: '#8B7355', fontFamily: 'monospace', flex: 1 },
+  activityTime: { fontSize: 11, color: '#F4B183', whiteSpace: 'nowrap' },
 
   // Analytics bars
   barRow: { display: 'flex', alignItems: 'center', gap: 10 },
-  barLabel: { width: 140, fontSize: 13, fontWeight: 500, color: '#1E1B4B', textAlign: 'right' },
-  barTrack: { flex: 1, height: 20, background: '#F3F0FF', borderRadius: 6, overflow: 'hidden' },
-  barFill: { height: '100%', background: 'linear-gradient(90deg,#7C3AED,#EC4899)', borderRadius: 6, transition: 'width 0.3s' },
-  barCount: { width: 30, fontSize: 13, fontWeight: 700, color: '#1E1B4B' },
+  barLabel: { width: 140, fontSize: 13, fontWeight: 500, color: '#3D2C1E', textAlign: 'right' },
+  barTrack: { flex: 1, height: 20, background: '#FFF5EB', borderRadius: 6, overflow: 'hidden' },
+  barFill: { height: '100%', background: 'linear-gradient(90deg,#E8842C,#F4A261)', borderRadius: 6, transition: 'width 0.3s' },
+  barCount: { width: 30, fontSize: 13, fontWeight: 700, color: '#3D2C1E' },
 
   // Event table
   eventTable: { background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' },
-  tableHeader: { display: 'flex', padding: '10px 16px', background: '#F3F0FF', fontSize: 12, fontWeight: 700, color: '#6B6190' },
+  tableHeader: { display: 'flex', padding: '10px 16px', background: '#FFF5EB', fontSize: 12, fontWeight: 700, color: '#8B7355' },
   tableRow: { display: 'flex', padding: '8px 16px', borderBottom: '1px solid #F8F5FF', fontSize: 13, alignItems: 'center' },
 };

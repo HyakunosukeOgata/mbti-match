@@ -14,7 +14,8 @@ export type EventName =
   | 'profile_updated'
   | 'pwa_install_prompt'
   | 'pwa_installed'
-  | 'apple_sign_in';
+  | 'apple_sign_in'
+  | 'report_user';
 
 interface AnalyticsEvent {
   name: EventName;

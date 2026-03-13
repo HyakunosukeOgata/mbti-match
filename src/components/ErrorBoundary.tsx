@@ -39,7 +39,7 @@ export class ErrorBoundary extends Component<Props, State> {
           >
             <span className="text-3xl">😵</span>
           </div>
-          <h1 className="text-2xl font-extrabold mb-2">哎呀，出了點問題</h1>
+          <h1 className="text-2xl font-bold mb-2">哎呀，出了點問題</h1>
           <p className="text-text-secondary text-sm mb-6 max-w-xs">
             別擔心，你的資料不會遺失。試試看重新整理頁面。
           </p>

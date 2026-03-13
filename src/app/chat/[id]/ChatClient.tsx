@@ -4,8 +4,9 @@ import { useApp } from '@/lib/store';
 import { useRouter } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
 import { mockUsers } from '@/lib/mock-data';
-import { ArrowLeft, Send, Shield, Flag, Zap } from 'lucide-react';
-import { calculateCompatibility, getSharedAnswers } from '@/lib/matching';
+import { ArrowLeft, Send, Shield, Flag } from 'lucide-react';
+import PhotoGallery from '@/components/PhotoGallery';
+import { calculateCompatibility } from '@/lib/matching';
 import { track } from '@/lib/analytics';
 import { moderateText } from '@/lib/moderation';
 
@@ -18,8 +19,11 @@ export default function ChatClient({ matchId }: { matchId: string }) {
   const [confirmAction, setConfirmAction] = useState<'report' | 'block' | null>(null);
   const [reportToast, setReportToast] = useState('');
   const [moderationWarning, setModerationWarning] = useState('');
+  const [reportReason, setReportReason] = useState('');
+  const REPORT_REASONS = ['不當言行', '假帳號 / 詐騙', '騷擾或威脅', '不雅照片', '未成年', '其他'];
 
   const match = matches.find(m => m.id === matchId);
+  const [showSuggestions, setShowSuggestions] = useState(true);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -47,7 +51,6 @@ export default function ChatClient({ matchId }: { matchId: string }) {
   const otherId = match.users.find(id => id !== currentUser.id);
   const otherUser = mockUsers.find(u => u.id === otherId);
   const compat = otherUser ? calculateCompatibility(currentUser, otherUser) : 0;
-  const shared = otherUser ? getSharedAnswers(currentUser, otherUser) : [];
 
   const handleSend = () => {
     if (!input.trim()) return;
@@ -64,25 +67,22 @@ export default function ChatClient({ matchId }: { matchId: string }) {
   return (
     <div className="min-h-dvh flex flex-col">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3" style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(20px)', borderBottom: '1px solid var(--border)' }}>
-        <button aria-label="返回" onClick={() => router.push('/matches')} className="text-text-secondary hover:text-primary p-1 rounded-xl transition-colors">
+      <div className="flex items-center gap-3 px-4 py-3" style={{ background: 'var(--bg-card-alpha)', backdropFilter: 'blur(20px)', borderBottom: '1px solid var(--border)', paddingTop: 'max(12px, env(safe-area-inset-top, 12px))' }}>
+        <button aria-label="返回" onClick={() => router.push('/matches')} className="text-text-secondary hover:text-primary p-2.5 -ml-1 rounded-xl transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
           <ArrowLeft size={22} />
         </button>
-        <div className="w-10 h-10 rounded-2xl overflow-hidden" style={{ boxShadow: '0 2px 8px rgba(124, 58, 237, 0.15)' }}>
-          <img
-            src={otherUser?.photos[0]}
-            alt={otherUser?.name}
-            className="w-full h-full object-cover"
-          />
-        </div>
-        <div className="flex-1">
-          <p className="font-bold text-sm">{otherUser?.name}</p>
-          <span className="mbti-badge !text-[10px] !py-0 !px-2">{otherUser?.mbtiCode}</span>
+        <PhotoGallery photos={otherUser?.photos || []} name={otherUser?.name || ''} mode="thumbnail" size="w-10 h-10" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <p className="font-semibold text-[15px] leading-tight truncate">{otherUser?.name}</p>
+            <span className="mbti-badge !text-[10px] !py-0 !px-1.5 shrink-0">{otherUser?.mbtiCode}</span>
+          </div>
+          <p className="text-[11px] text-text-secondary leading-tight mt-0.5">契合度 {compat}%</p>
         </div>
         <button
           aria-label="安全選項"
           onClick={() => setShowReport(!showReport)}
-          className="text-text-secondary hover:text-danger p-2 rounded-xl transition-colors"
+          className="text-text-secondary hover:text-danger p-2.5 -mr-1 rounded-xl transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
         >
           <Shield size={18} />
         </button>
@@ -108,70 +108,122 @@ export default function ChatClient({ matchId }: { matchId: string }) {
       )}
 
       {confirmAction && (
-        <div className="mx-4 mt-2 p-4 rounded-2xl glass-card animate-scale-in">
-          <p className="text-sm font-medium text-center mb-3">
-            {confirmAction === 'report' ? '確定要檢舉此用戶嗎？' : '確定要封鎖此用戶嗎？封鎖後將無法聯繫。'}
-          </p>
-          <div className="flex gap-2">
-            <button className="btn-secondary flex-1 text-sm" onClick={() => { setConfirmAction(null); setShowReport(false); }}>取消</button>
-            <button
-              className="btn-primary flex-1 text-sm !bg-red-500"
-              onClick={() => {
-                const action = confirmAction;
-                setConfirmAction(null);
-                setShowReport(false);
-                if (action === 'block') {
-                  removeMatch(matchId);
-                  router.push('/matches');
-                } else {
-                  setReportToast('✅ 已收到你的檢舉，我們會儘快處理');
-                  setTimeout(() => setReportToast(''), 3000);
-                }
-              }}
-            >
-              {confirmAction === 'report' ? '確認檢舉' : '確認封鎖'}
-            </button>
-          </div>
+        <div className="mx-4 mt-2 p-4 rounded-2xl glass-card animate-scale-in" role="dialog" aria-modal="true" aria-label={confirmAction === 'report' ? '檢舉用戶' : '封鎖用戶'}>
+          {confirmAction === 'report' ? (
+            <>
+              <p className="text-sm font-medium text-center mb-3">請選擇檢舉原因</p>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {REPORT_REASONS.map((reason) => (
+                  <button
+                    key={reason}
+                    className={`text-xs py-3 px-3 rounded-xl border transition-all min-h-[44px] ${reportReason === reason ? 'border-danger bg-red-50 text-danger font-bold' : 'border-border text-text-secondary hover:border-danger/30'}`}
+                    onClick={() => setReportReason(reason)}
+                  >
+                    {reason}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button className="btn-secondary flex-1 text-sm" onClick={() => { setConfirmAction(null); setShowReport(false); setReportReason(''); }}>取消</button>
+                <button
+                  className="btn-primary flex-1 text-sm !bg-red-500"
+                  disabled={!reportReason}
+                  onClick={() => {
+                    // Store report in localStorage
+                    if (otherId) {
+                      try {
+                        const raw = localStorage.getItem('mochi_reports');
+                        const reports = raw ? JSON.parse(raw) : [];
+                        reports.push({
+                          reportedUserId: otherId,
+                          reportedName: otherUser?.name || otherId,
+                          reason: reportReason,
+                          matchId,
+                          timestamp: new Date().toISOString(),
+                        });
+                        localStorage.setItem('mochi_reports', JSON.stringify(reports));
+                      } catch { /* ignore */ }
+                    }
+                    setConfirmAction(null);
+                    setShowReport(false);
+                    setReportReason('');
+                    setReportToast('✅ 已收到你的檢舉，我們會儘快處理');
+                    setTimeout(() => setReportToast(''), 3000);
+                    track('report_user', { reportedUserId: otherId || '', reason: reportReason });
+                  }}
+                >
+                  確認檢舉
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-center mb-3">確定要封鎖此用戶嗎？封鎖後將無法聯繫。</p>
+              <div className="flex gap-2">
+                <button className="btn-secondary flex-1 text-sm" onClick={() => { setConfirmAction(null); setShowReport(false); }}>取消</button>
+                <button
+                  className="btn-primary flex-1 text-sm !bg-red-500"
+                  onClick={() => {
+                    setConfirmAction(null);
+                    setShowReport(false);
+                    if (otherId) {
+                      try {
+                        const raw = localStorage.getItem('mochi_blocked_users');
+                        const blocked: string[] = raw ? JSON.parse(raw) : [];
+                        if (!blocked.includes(otherId)) {
+                          blocked.push(otherId);
+                          localStorage.setItem('mochi_blocked_users', JSON.stringify(blocked));
+                        }
+                        const namesRaw = localStorage.getItem('mochi_blocked_names');
+                        const names: Record<string, string> = namesRaw ? JSON.parse(namesRaw) : {};
+                        names[otherId] = otherUser?.name || otherId;
+                        localStorage.setItem('mochi_blocked_names', JSON.stringify(names));
+                      } catch { /* ignore */ }
+                    }
+                    removeMatch(matchId);
+                    router.push('/matches');
+                  }}
+                >
+                  確認封鎖
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
-      {/* Topic card + partner info */}
-      <div className="mx-4 mt-3 p-4 rounded-2xl" style={{ background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.06), rgba(244, 63, 94, 0.04))' }}>
-        <div className="flex items-center gap-2 mb-2">
-          <Zap size={14} className="text-primary" />
-          <span className="text-xs font-bold text-primary">契合度 {compat}%</span>
-        </div>
-        <p className="text-xs font-semibold text-primary mb-1">💬 配對話題</p>
-        <p className="text-sm font-medium mb-2">{match.topic.text}</p>
-        {shared.length > 0 && (
-          <div className="pt-2 border-t border-border/50">
-            <p className="text-[10px] text-text-secondary mb-1.5">✨ 你們的共同點</p>
-            <div className="flex flex-wrap gap-1.5">
-              {shared.slice(0, 3).map((s, i) => (
-                <span key={i} className="pill text-[10px]">{s.category}</span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-        {match.messages.map((msg) => {
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1" style={{ overscrollBehavior: 'contain' }}>
+        {match.messages.map((msg, index) => {
           const isMe = msg.senderId === currentUser.id;
           const isSystem = msg.senderId === 'system';
+
+          if (isSystem) {
+            return (
+              <div key={msg.id} className="flex justify-center animate-fade-in py-2">
+                <div className="chat-bubble system">{msg.text}</div>
+              </div>
+            );
+          }
+
+          // Only show timestamp on last message in a consecutive group from same sender within 1 minute
+          const next = match.messages[index + 1];
+          const showTime = !next
+            || next.senderId !== msg.senderId
+            || next.senderId === 'system'
+            || new Date(next.timestamp).getTime() - new Date(msg.timestamp).getTime() > 60000;
 
           return (
             <div
               key={msg.id}
-              className={`flex ${isSystem ? 'justify-center' : isMe ? 'justify-end' : 'justify-start'} animate-fade-in`}
+              className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${isMe ? 'animate-msg-mine' : 'animate-msg-theirs'}`}
             >
-              <div>
-                <div className={`chat-bubble ${isSystem ? 'system' : isMe ? 'mine' : 'theirs'}`}>
+              <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`} style={{ maxWidth: '72%' }}>
+                <div className={`chat-bubble ${isMe ? 'mine' : 'theirs'}`}>
                   {msg.text}
                 </div>
-                {!isSystem && (
-                  <p className={`text-[10px] text-text-secondary mt-0.5 ${isMe ? 'text-right' : 'text-left'} px-1 opacity-60`}>
+                {showTime && (
+                  <p className="text-[11px] text-text-secondary mt-1 px-1 opacity-60">
                     {new Date(msg.timestamp).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 )}
@@ -182,33 +234,63 @@ export default function ChatClient({ matchId }: { matchId: string }) {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Quick-reply suggestions */}
+      {showSuggestions && match.messages.filter(m => m.senderId === currentUser.id).length === 0 && (
+        <div className="px-4 pt-2 pb-3 animate-fade-in">
+          <p className="text-[11px] text-text-secondary mb-2 font-medium">💡 開場建議</p>
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {[
+              `哈囉！${match.topic.text.substring(0, 15)}...你覺得呢？`,
+              `嗨～看到我們的契合度是 ${compat}%，好開心！`,
+              '你好呀 👋 很高興配對到你！',
+            ].map((text, i) => (
+              <button
+                key={i}
+                className="text-[13px] px-4 py-2.5 rounded-full transition-all active:scale-95 whitespace-nowrap shrink-0 min-h-[44px]"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(232, 132, 44, 0.06), rgba(255, 107, 107, 0.04))',
+                  border: '1.5px solid rgba(232, 132, 44, 0.18)',
+                  color: 'var(--primary)',
+                }}
+                onClick={() => {
+                  setInput(text);
+                  setShowSuggestions(false);
+                }}
+              >
+                {text}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Input */}
-      <div className="p-4 flex gap-3" style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(20px)', borderTop: '1px solid var(--border)' }}>
+      <div className="px-4 pt-3 flex gap-2.5 items-end" style={{ background: 'var(--bg-card-alpha)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', borderTop: '1px solid var(--border)', paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' }}>
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+          onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && handleSend()}
           placeholder="說點什麼吧..."
-          className="flex-1"
+          className="flex-1 !text-[15px] !rounded-full !py-2.5 !px-4 !border-[1.5px]"
         />
         <button
           aria-label="送出訊息"
           onClick={handleSend}
           disabled={!input.trim()}
-          className="w-11 h-11 rounded-2xl flex items-center justify-center transition-all"
+          className="w-10 h-10 rounded-full flex items-center justify-center transition-all shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
           style={{
-            background: input.trim() ? 'linear-gradient(135deg, #7C3AED, #F43F5E)' : 'var(--bg-input)',
-            boxShadow: input.trim() ? '0 4px 12px rgba(124, 58, 237, 0.3)' : 'none',
+            background: input.trim() ? 'linear-gradient(135deg, #E8842C, #FF6B6B)' : 'var(--bg-input)',
+            boxShadow: input.trim() ? '0 3px 10px rgba(232, 132, 44, 0.28)' : 'none',
           }}
         >
-          <Send size={18} color={input.trim() ? 'white' : 'var(--text-secondary)'} />
+          <Send size={17} color={input.trim() ? 'white' : 'var(--text-secondary)'} />
         </button>
       </div>
 
       {/* Moderation warning */}
       {moderationWarning && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 animate-slide-up">
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 animate-slide-up" role="alert" aria-live="assertive">
           <div className="px-5 py-3 rounded-2xl shadow-lg text-white text-sm font-medium" style={{ background: 'rgba(220, 38, 38, 0.9)' }}>
             ⚠️ {moderationWarning}
           </div>
@@ -217,7 +299,7 @@ export default function ChatClient({ matchId }: { matchId: string }) {
 
       {/* Report toast */}
       {reportToast && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 animate-slide-up">
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 animate-slide-up" role="status" aria-live="polite">
           <div className="px-5 py-3 rounded-2xl shadow-lg text-white text-sm font-medium" style={{ background: 'rgba(30,30,30,0.9)' }}>
             {reportToast}
           </div>

@@ -15,6 +15,7 @@ export interface MBTIProfile {
 export interface ScenarioQuestion {
   id: string;
   question: string;
+  partnerQuestion: string;   // 對方視角的題目文字
   options: string[];
   category: string;
   week: number; // 第幾週的題目
@@ -41,6 +42,7 @@ export interface UserProfile {
     ageMax: number;
     genderPreference: ('male' | 'female' | 'other')[];
     region: string;
+    preferredRegions?: string[];  // multi-select: cities user wants to match with
   };
   onboardingComplete: boolean;
   createdAt: string;
@@ -85,3 +87,14 @@ export interface LikeAction {
   topicAnswer: string;
   timestamp: string;
 }
+
+// 台灣所有縣市（22 個）
+export const TAIWAN_CITIES = [
+  '台北市', '新北市', '基隆市', '桃園市',
+  '新竹市', '新竹縣', '苗栗縣',
+  '台中市', '彰化縣', '南投縣',
+  '雲林縣', '嘉義市', '嘉義縣',
+  '台南市', '高雄市', '屏東縣',
+  '宜蘭縣', '花蓮縣', '台東縣',
+  '澎湖縣', '金門縣', '連江縣',
+] as const;

@@ -37,9 +37,20 @@ async function main() {
   await page.goto(`${BASE}/`);
   await page.waitForTimeout(1000);
 
-  // Take login page screenshot BEFORE logging in
-  await page.screenshot({ path: `${OUT}/01-login.png`, fullPage: false });
-  console.log('✓ 01-login.png');
+  // Take age verification screenshot
+  await page.screenshot({ path: `${OUT}/01-age-gate.png`, fullPage: false });
+  console.log('✓ 01-age-gate.png');
+
+  // Pass age gate
+  const ageBtn = page.locator('button:has-text("我已滿 18 歲")').first();
+  if (await ageBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await ageBtn.click();
+    await page.waitForTimeout(500);
+  }
+
+  // Take login page screenshot
+  await page.screenshot({ path: `${OUT}/02-login.png`, fullPage: false });
+  console.log('✓ 02-login.png');
 
   // Try to log in
   const nameInput = page.locator('input[placeholder*="暱稱"], input[placeholder*="名字"], input[type="text"]').first();
@@ -56,8 +67,8 @@ async function main() {
   // MBTI test page
   await page.goto(`${BASE}/onboarding/mbti`);
   await page.waitForTimeout(1500);
-  await page.screenshot({ path: `${OUT}/02-mbti-test.png`, fullPage: false });
-  console.log('✓ 02-mbti-test.png');
+  await page.screenshot({ path: `${OUT}/03-mbti-test.png`, fullPage: false });
+  console.log('✓ 03-mbti-test.png');
 
   // Complete MBTI quickly by setting localStorage
   await page.evaluate(() => {
@@ -74,8 +85,8 @@ async function main() {
   // Scenario questions page
   await page.goto(`${BASE}/onboarding/scenarios`);
   await page.waitForTimeout(1500);
-  await page.screenshot({ path: `${OUT}/03-scenarios.png`, fullPage: false });
-  console.log('✓ 03-scenarios.png');
+  await page.screenshot({ path: `${OUT}/04-scenarios.png`, fullPage: false });
+  console.log('✓ 04-scenarios.png');
 
   // Set scenario answers to unlock home
   await page.evaluate(() => {
@@ -89,20 +100,20 @@ async function main() {
   // Daily matches / Home
   await page.goto(`${BASE}/home`);
   await page.waitForTimeout(2500);
-  await page.screenshot({ path: `${OUT}/04-daily-matches.png`, fullPage: false });
-  console.log('✓ 04-daily-matches.png');
+  await page.screenshot({ path: `${OUT}/05-daily-matches.png`, fullPage: false });
+  console.log('✓ 05-daily-matches.png');
 
   // Matches page
   await page.goto(`${BASE}/matches`);
   await page.waitForTimeout(1500);
-  await page.screenshot({ path: `${OUT}/05-matches.png`, fullPage: false });
-  console.log('✓ 05-matches.png');
+  await page.screenshot({ path: `${OUT}/06-matches.png`, fullPage: false });
+  console.log('✓ 06-matches.png');
 
   // Settings page
   await page.goto(`${BASE}/settings`);
   await page.waitForTimeout(1500);
-  await page.screenshot({ path: `${OUT}/06-settings.png`, fullPage: false });
-  console.log('✓ 06-settings.png');
+  await page.screenshot({ path: `${OUT}/07-settings.png`, fullPage: false });
+  console.log('✓ 07-settings.png');
 
   await browser.close();
   console.log(`\n✅ All screenshots saved to ${OUT}/`);

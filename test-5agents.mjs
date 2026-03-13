@@ -45,6 +45,15 @@ function log(agent, msg) {
   console.log(`  [${agent}] ${msg}`);
 }
 
+// Helper: pass 18+ age verification gate
+async function passAgeGate(page) {
+  const ageBtn = page.locator('button:has-text("我已滿 18 歲")');
+  if (await ageBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await ageBtn.click();
+    await page.waitForTimeout(500);
+  }
+}
+
 function assert(agent, testName, condition, detail = '') {
   if (condition) {
     RESULTS.pass++;
@@ -70,6 +79,9 @@ async function agent1(browser) {
   await page.waitForLoadState('networkidle');
   const title = await page.title();
   assert(name, 'Login page loads', title.includes('Mochi'), `title="${title}"`);
+
+  // 1.5 Pass age gate
+  await passAgeGate(page);
 
   // 2. Check gradient text visible
   const gradientText = await page.locator('.gradient-text').first().textContent();
@@ -228,6 +240,7 @@ async function agent2(browser) {
   // Quick login
   await page.goto(BASE);
   await page.waitForLoadState('networkidle');
+  await passAgeGate(page);
   const nameInput = page.locator('input[type="text"]');
   await nameInput.fill('阿凱');
   await page.locator('button:has-text("開始配對之旅")').click();
@@ -319,6 +332,7 @@ async function agent3(browser) {
   // 1. Test empty name login
   await page.goto(BASE);
   await page.waitForLoadState('networkidle');
+  await passAgeGate(page);
   const loginBtn = page.locator('button:has-text("開始配對之旅")');
   
   // Try login with empty name
@@ -341,6 +355,7 @@ async function agent3(browser) {
   await page.evaluate(() => { localStorage.clear(); localStorage.setItem('mochi_analytics_consent', 'true'); });
   await page.goto(BASE);
   await page.waitForLoadState('networkidle');
+  await passAgeGate(page);
 
   // 3. Normal login
   await page.locator('input[type="text"]').fill('心怡');
@@ -445,6 +460,7 @@ async function agent4(browser) {
   // Quick complete onboarding
   await page.goto(BASE);
   await page.waitForLoadState('networkidle');
+  await passAgeGate(page);
   await page.locator('input[type="text"]').fill('大明');
   await page.locator('button:has-text("開始配對之旅")').click();
   await page.waitForURL('**/onboarding/mbti', { timeout: 5000 });
@@ -551,9 +567,12 @@ async function agent4(browser) {
   const afterLogoutUrl = page.url();
   assert(name, 'Logout redirects to login', !afterLogoutUrl.includes('/settings'), `url=${afterLogoutUrl}`);
 
-  // 12. Verify logged out — no more user data
+  // 12. Verify logged out — age gate or login form shown
+  const ageGateBtn = page.locator('button:has-text("我已滿 18 歲")');
   const loginInput = page.locator('input[type="text"]');
-  assert(name, 'Login page shown after logout', await loginInput.count() > 0);
+  const showsAgeGate = await ageGateBtn.count() > 0;
+  const showsLogin = await loginInput.count() > 0;
+  assert(name, 'Login page shown after logout', showsAgeGate || showsLogin, `ageGate=${showsAgeGate}, login=${showsLogin}`);
 
   // 13. Check no Pairly references
   const bodyText = await page.locator('body').textContent();
@@ -573,6 +592,7 @@ async function agent5(browser) {
   // Quick onboarding
   await page.goto(BASE);
   await page.waitForLoadState('networkidle');
+  await passAgeGate(page);
   await page.locator('input[type="text"]').fill('小風');
   await page.locator('button:has-text("開始配對之旅")').click();
   await page.waitForURL('**/onboarding/mbti', { timeout: 5000 });

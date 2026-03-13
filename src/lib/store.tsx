@@ -186,7 +186,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ageMin: 20,
         ageMax: 35,
         genderPreference: ['female', 'male', 'other'],
-        region: '台北',
+        region: '台北市',
       },
       onboardingComplete: false,
       createdAt: new Date().toISOString(),
@@ -208,7 +208,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('mbti-match-daily');
     localStorage.removeItem('mbti-match-matches');
     localStorage.removeItem('mbti-match-likes');
+    localStorage.removeItem('mbti-match-skipped');
     localStorage.removeItem('mochi_analytics_consent');
+    localStorage.removeItem('mochi_blocked_users');
+    localStorage.removeItem('mochi_blocked_names');
+    localStorage.removeItem('mochi_reports');
+    localStorage.removeItem('mochi_profile_visible');
+    localStorage.removeItem('mochi_hide_age');
     if ('caches' in window) {
       caches.delete('mochi-v1').catch(() => {});
     }
@@ -247,7 +253,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     const likedIds = likesRef.current.map(l => l.toUserId);
     const matchedIds = matchesRef.current.flatMap(m => m.users).filter(id => id !== user.id);
-    const excludeIds = [...new Set([...likedIds, ...matchedIds])];
+    // Also exclude blocked users
+    let blockedIds: string[] = [];
+    try {
+      const raw = localStorage.getItem('mochi_blocked_users');
+      if (raw) blockedIds = JSON.parse(raw);
+    } catch { /* ignore */ }
+    // Also exclude previously skipped users (from any session)
+    let skippedIds: string[] = [];
+    try {
+      const raw = localStorage.getItem('mbti-match-skipped');
+      if (raw) skippedIds = JSON.parse(raw);
+    } catch { /* ignore */ }
+    const excludeIds = [...new Set([...likedIds, ...matchedIds, ...blockedIds, ...skippedIds])];
     const topMatches = getDailyMatches(user, mockUsers, excludeIds);
     const topics = getRandomTopics(5);
     const now = new Date();
@@ -288,7 +306,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return updated;
     });
 
-    const isMutual = Math.random() > 0.4;
+    // 基於兼容度決定配對機率：80%+ → 90% 配對，60-79% → 50%，<60% → 15%
+    const compat = calculateCompatibility(user, mockUsers.find(u => u.id === userId) || user);
+    const matchChance = compat >= 80 ? 0.9 : compat >= 60 ? 0.5 : 0.15;
+    const isMutual = Math.random() < matchChance;
     if (isMutual) {
       const card = dailyCardsRef.current.find(c => c.user.id === userId);
       const otherUser = mockUsers.find(u => u.id === userId);
@@ -323,6 +344,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const skipUser = useCallback((userId: string) => {
     track('card_skip', { targetUserId: userId });
+    // Persist skipped user so they don't reappear
+    try {
+      const raw = localStorage.getItem('mbti-match-skipped');
+      const skipped: string[] = raw ? JSON.parse(raw) : [];
+      if (!skipped.includes(userId)) {
+        skipped.push(userId);
+        localStorage.setItem('mbti-match-skipped', JSON.stringify(skipped));
+      }
+    } catch { /* ignore */ }
     setDailyCards(prev => {
       const updated = prev.map(c => (c.user.id === userId ? { ...c, skipped: true } : c));
       saveDailyCards(updated);
@@ -332,6 +362,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const undoSkip = useCallback((userId: string) => {
     track('card_undo', { targetUserId: userId });
+    // Remove from persisted skipped list
+    try {
+      const raw = localStorage.getItem('mbti-match-skipped');
+      const skipped: string[] = raw ? JSON.parse(raw) : [];
+      const updated = skipped.filter(id => id !== userId);
+      localStorage.setItem('mbti-match-skipped', JSON.stringify(updated));
+    } catch { /* ignore */ }
     setDailyCards(prev => {
       const updated = prev.map(c => (c.user.id === userId ? { ...c, skipped: false } : c));
       saveDailyCards(updated);
@@ -358,12 +395,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       )
     );
 
-    // Demo: auto-reply
-    setTimeout(() => {
-      if (matchesRef.current.length === 0) return;
-      const otherUserId = matchesRef.current
-        .find(m => m.id === matchId)
-        ?.users.find(id => id !== user.id);
+    // Demo: auto-reply (with cleanup to prevent leaks)
+    const replyTimer = setTimeout(() => {
+      const currentMatch = matchesRef.current.find(m => m.id === matchId);
+      if (!currentMatch) return; // match was deleted, skip
+      const otherUserId = currentMatch.users.find(id => id !== user.id);
+      if (!otherUserId) return;
       const autoReplies = [
         '哈哈，我也這麼覺得！',
         '真的嗎？好有趣 😄',
@@ -374,7 +411,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ];
       const reply: ChatMessage = {
         id: `reply-${Date.now()}-${msgCounter++}`,
-        senderId: otherUserId || 'unknown',
+        senderId: otherUserId,
         text: autoReplies[Math.floor(Math.random() * autoReplies.length)],
         timestamp: new Date().toISOString(),
       };
@@ -383,7 +420,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           m.id === matchId ? { ...m, messages: [...m.messages, reply] } : m
         )
       );
-    }, 2000);
+    }, 1500 + Math.random() * 2000); // 隨機 1.5-3.5 秒
+    void replyTimer; // suppress unused warning
   }, []);
 
   const removeMatch = useCallback((matchId: string) => {
@@ -435,18 +473,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: 'linear-gradient(135deg, #FAF5FF, #FDF2F8)',
+                background: 'linear-gradient(135deg, #FFF8F0, #FFF3E8)',
               }}>
                 <div style={{
                   width: 64, height: 64, borderRadius: 20,
-                  background: 'linear-gradient(135deg, #7C3AED, #F43F5E)',
+                  background: 'linear-gradient(135deg, #E8842C, #FF6B6B)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 8px 32px rgba(124, 58, 237, 0.3)',
+                  boxShadow: '0 8px 32px rgba(232, 132, 44, 0.3)',
                   animation: 'pulse 1.5s ease-in-out infinite',
                 }}>
                   <span style={{ fontSize: 28 }}>💜</span>
                 </div>
-                <p style={{ marginTop: 16, color: '#7C3AED', fontWeight: 600, fontSize: 14 }}>
+                <p style={{ marginTop: 16, color: '#E8842C', fontWeight: 600, fontSize: 14 }}>
                   載入中...
                 </p>
               </div>

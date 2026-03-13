@@ -7,8 +7,7 @@ import React from 'react';
 import { ArrowRight, Camera } from 'lucide-react';
 import { track } from '@/lib/analytics';
 import { moderateBio } from '@/lib/moderation';
-
-const regions = ['台北', '新北', '桃園', '台中', '台南', '高雄', '新竹', '其他'];
+import { TAIWAN_CITIES } from '@/lib/types';
 
 export default function ProfilePage() {
   const { currentUser, updateProfile, setOnboardingStep } = useApp();
@@ -16,17 +15,60 @@ export default function ProfilePage() {
 
   const [photos, setPhotos] = useState<string[]>(currentUser?.photos || []);
   const [bio, setBio] = useState(currentUser?.bio || '');
-  const [birthdate, setBirthdate] = useState('');
+  const [nickname, setNickname] = useState(currentUser?.name || '');
+  const [birthYear, setBirthYear] = useState<number | ''>('');
+  const [birthMonth, setBirthMonth] = useState<number | ''>('');
+  const [birthDay, setBirthDay] = useState<number | ''>('');
   const [age, setAge] = useState(currentUser?.age || 25);
   const [ageError, setAgeError] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | 'other'>(currentUser?.gender || 'male');
-  const [region, setRegion] = useState(currentUser?.preferences.region || '台北');
+  const [region, setRegion] = useState(currentUser?.preferences.region || '');
   const [bioError, setBioError] = useState('');
+  const [photoError, setPhotoError] = useState('');
+  const [showCelebration, setShowCelebration] = useState(false);
   const [ageMin, setAgeMin] = useState(currentUser?.preferences.ageMin || 20);
   const [ageMax, setAgeMax] = useState(currentUser?.preferences.ageMax || 35);
   const [genderPref, setGenderPref] = useState<string[]>(
     currentUser?.preferences.genderPreference || ['female', 'male', 'other']
   );
+  const [preferredRegions, setPreferredRegions] = useState<string[]>(
+    currentUser?.preferences.preferredRegions || []
+  );
+
+  // Calculate age whenever birth fields change
+  useEffect(() => {
+    if (birthYear && birthMonth && birthDay) {
+      const today = new Date();
+      let calcAge = today.getFullYear() - birthYear;
+      const monthDiff = today.getMonth() + 1 - birthMonth;
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDay)) {
+        calcAge--;
+      }
+      if (calcAge < 18) {
+        setAgeError('本服務僅限 18 歲以上使用');
+        setAge(calcAge);
+      } else if (calcAge > 100) {
+        setAgeError('請輸入有效的出生日期');
+        setAge(25);
+      } else {
+        setAgeError('');
+        setAge(calcAge);
+      }
+    } else {
+      setAgeError('');
+    }
+  }, [birthYear, birthMonth, birthDay]);
+
+  const isBirthdateComplete = birthYear !== '' && birthMonth !== '' && birthDay !== '';
+
+  // Generate year/month/day options
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 80 }, (_, i) => currentYear - 18 - i);
+  const months = Array.from({ length: 12 }, (_, i) => i + 1);
+  const daysInMonth = birthYear && birthMonth
+    ? new Date(birthYear as number, birthMonth as number, 0).getDate()
+    : 31;
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
   useEffect(() => {
     if (!currentUser) {
@@ -55,8 +97,18 @@ export default function ProfilePage() {
   const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) return;
-    if (file.size > 2 * 1024 * 1024) return;
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('❌ 請選擇圖片檔案');
+      setTimeout(() => setPhotoError(''), 3000);
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setPhotoError('❌ 照片不可超過 2MB');
+      setTimeout(() => setPhotoError(''), 3000);
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
@@ -84,6 +136,7 @@ export default function ProfilePage() {
     const validAgeMin = Math.max(18, Math.min(60, ageMin));
     const validAgeMax = Math.max(validAgeMin, Math.min(60, ageMax));
     updateProfile({
+      name: nickname.trim() || currentUser.name,
       photos,
       bio,
       age: validAge,
@@ -93,15 +146,62 @@ export default function ProfilePage() {
         ageMax: validAgeMax,
         genderPreference: genderPref as ('male' | 'female' | 'other')[],
         region,
+        preferredRegions: preferredRegions.length > 0 ? preferredRegions : undefined,
       },
       onboardingComplete: true,
     });
     track('onboarding_complete');
     setOnboardingStep(4);
-    router.push('/home');
+    setShowCelebration(true);
   };
 
   const avatarColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD'];
+
+  if (showCelebration) {
+    return (
+      <div className="min-h-dvh flex flex-col items-center justify-center px-6 relative overflow-hidden">
+        {/* Background particles */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {[0,1,2,3,4,5,6,7].map(i => (
+            <div key={i} className="absolute text-2xl" style={{
+              top: '-10%',
+              left: `${10 + i * 12}%`,
+              animation: `confetti-fall ${3 + i * 0.4}s ease-in ${i * 0.2}s infinite`,
+            }}>
+              {['🎉','✨','💜','🎊','💫','🌟','🎈','💜'][i]}
+            </div>
+          ))}
+        </div>
+
+        <div className="text-center animate-bounce-in relative z-10">
+          <div className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6" style={{ background: 'linear-gradient(135deg, #E8842C, #FF6B6B)', boxShadow: '0 0 50px rgba(232, 132, 44, 0.4)' }}>
+            <span className="text-4xl">🎉</span>
+          </div>
+          <h1 className="text-3xl font-bold mb-2">
+            <span className="shimmer-text">歡迎加入 Mochi！</span>
+          </h1>
+          <p className="text-text-secondary text-sm mb-2">
+            你的個人資料已建立完成
+          </p>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-8 animate-slide-up" style={{ background: 'rgba(232, 132, 44, 0.08)', animationDelay: '0.3s' }}>
+            <span className="mbti-badge">{currentUser.mbtiCode}</span>
+            <span className="text-sm font-medium">{nickname || currentUser.name}</span>
+          </div>
+          <div className="space-y-3 animate-slide-up" style={{ animationDelay: '0.5s' }}>
+            <button
+              className="btn-primary flex items-center justify-center gap-2"
+              onClick={() => router.push('/home')}
+            >
+              ✨ 開始探索配對
+            </button>
+            <p className="text-xs text-text-secondary opacity-60">
+              每天為你推薦最合適的人選
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-dvh flex flex-col px-6 py-8">
@@ -125,7 +225,8 @@ export default function ProfilePage() {
                 <img src={photo} alt={`照片 ${idx + 1}`} className="w-full h-full object-cover" />
                 <button
                   onClick={() => handleRemovePhoto(idx)}
-                  className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/50 text-white text-xs flex items-center justify-center"
+                  className="absolute -top-1 -right-1 w-8 h-8 min-w-[44px] min-h-[44px] rounded-full bg-black/50 text-white text-xs flex items-center justify-center"
+                  aria-label={`刪除照片 ${idx + 1}`}
                 >✕</button>
               </div>
             ))}
@@ -149,47 +250,54 @@ export default function ProfilePage() {
               </>
             )}
           </div>
+          {photoError && (
+            <p className="text-red-500 text-xs mt-2">{photoError}</p>
+          )}
         </div>
 
         <div>
           <label className="text-sm font-medium text-text-secondary mb-2 block">暱稱</label>
-          <input type="text" value={currentUser.name} readOnly className="opacity-60" />
+          <input
+            type="text"
+            value={nickname}
+            onChange={(e) => setNickname(e.target.value)}
+            placeholder="你的暱稱"
+            maxLength={20}
+          />
         </div>
 
         <div>
           <label className="text-sm font-medium text-text-secondary mb-2 block">🎂 出生日期（18+ 驗證）</label>
-          <input
-            type="date"
-            value={birthdate}
-            onChange={(e) => {
-              const val = e.target.value;
-              setBirthdate(val);
-              setAgeError('');
-              if (val) {
-                const birth = new Date(val);
-                const today = new Date();
-                let calcAge = today.getFullYear() - birth.getFullYear();
-                const monthDiff = today.getMonth() - birth.getMonth();
-                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-                  calcAge--;
-                }
-                if (calcAge < 18) {
-                  setAgeError('本服務僅限 18 歲以上使用');
-                  setAge(calcAge);
-                } else if (calcAge > 100) {
-                  setAgeError('請輸入有效的出生日期');
-                  setAge(25);
-                } else {
-                  setAge(calcAge);
-                }
-              }
-            }}
-            max={new Date(new Date().getFullYear() - 18, new Date().getMonth(), new Date().getDate()).toISOString().split('T')[0]}
-          />
+          <div className="flex gap-2">
+            <select
+              value={birthYear}
+              onChange={(e) => setBirthYear(e.target.value ? Number(e.target.value) : '')}
+              className="flex-[1.2]"
+            >
+              <option value="">年</option>
+              {years.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <select
+              value={birthMonth}
+              onChange={(e) => setBirthMonth(e.target.value ? Number(e.target.value) : '')}
+              className="flex-1"
+            >
+              <option value="">月</option>
+              {months.map(m => <option key={m} value={m}>{m} 月</option>)}
+            </select>
+            <select
+              value={birthDay}
+              onChange={(e) => setBirthDay(e.target.value ? Number(e.target.value) : '')}
+              className="flex-1"
+            >
+              <option value="">日</option>
+              {days.map(d => <option key={d} value={d}>{d} 日</option>)}
+            </select>
+          </div>
           {ageError && (
             <p className="text-xs text-danger mt-1">{ageError}</p>
           )}
-          {!ageError && birthdate && (
+          {!ageError && isBirthdateComplete && (
             <p className="text-xs text-success mt-1">✅ 年齡驗證通過（{age} 歲）</p>
           )}
         </div>
@@ -214,9 +322,13 @@ export default function ProfilePage() {
         </div>
 
         <div>
-          <label className="text-sm font-medium text-text-secondary mb-2 block">📍 所在地區</label>
-          <select value={region} onChange={(e) => setRegion(e.target.value)}>
-            {regions.map(r => (
+          <label className="text-sm font-medium text-text-secondary mb-2 block">📍 所在縣市</label>
+          <select
+            value={region}
+            onChange={(e) => setRegion(e.target.value)}
+          >
+            <option value="">請選擇縣市</option>
+            {TAIWAN_CITIES.map(r => (
               <option key={r} value={r}>{r}</option>
             ))}
           </select>
@@ -236,7 +348,7 @@ export default function ProfilePage() {
           )}
         </div>
 
-        <div className="card !border-none" style={{ background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.04), rgba(244, 63, 94, 0.03))' }}>
+        <div className="card !border-none" style={{ background: 'linear-gradient(135deg, rgba(232, 132, 44, 0.04), rgba(255, 107, 107, 0.03))' }}>
           <h3 className="font-bold mb-4 gradient-text">💕 配對偏好</h3>
 
           <div className="mb-4">
@@ -281,6 +393,26 @@ export default function ProfilePage() {
               <span className="text-sm text-text-secondary">歲</span>
             </div>
           </div>
+
+          <div>
+            <label className="text-sm font-medium text-text-secondary mb-2 block">📍 希望配對的縣市（可複選）</label>
+            <div className="flex flex-wrap gap-2">
+              {TAIWAN_CITIES.map(r => (
+                <button
+                  key={r}
+                  type="button"
+                  className={`strength-btn !py-2.5 !px-3 !text-xs ${preferredRegions.includes(r) ? 'active' : ''}`}
+                  onClick={() => setPreferredRegions(prev => prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r])}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+            {preferredRegions.length > 0 && (
+              <p className="text-xs text-primary mt-1.5">已選 {preferredRegions.length} 個縣市</p>
+            )}
+            <p className="text-xs text-text-secondary mt-1.5 opacity-60">不選 = 不限地區</p>
+          </div>
         </div>
       </div>
 
@@ -288,7 +420,7 @@ export default function ProfilePage() {
         <button
           className="btn-primary flex items-center justify-center gap-2"
           onClick={handleComplete}
-          disabled={!bio.trim() || photos.length === 0 || !birthdate || !!ageError}
+          disabled={!bio.trim() || photos.length === 0 || !isBirthdateComplete || !!ageError || !region}
         >
           完成設定，開始配對！🚀
         </button>

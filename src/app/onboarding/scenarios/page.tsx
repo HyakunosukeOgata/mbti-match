@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { scenarioQuestions } from '@/lib/mock-data';
 import { ScenarioAnswer } from '@/lib/types';
-import { ArrowRight, User, Users } from 'lucide-react';
+import { ArrowRight, ArrowLeft, User, Users } from 'lucide-react';
 import { track } from '@/lib/analytics';
 
 export default function ScenariosPage() {
@@ -43,6 +43,25 @@ export default function ScenariosPage() {
       setMyAnswer(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]);
     } else {
       setPartnerAnswer(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]);
+    }
+  };
+
+  const handleBack = () => {
+    if (phase === 'partner') {
+      // Go back to 'my' phase for same question
+      setPhase('my');
+      return;
+    }
+    if (currentQ > 0) {
+      // Go back to previous question's partner phase
+      setCurrentQ(currentQ - 1);
+      setPhase('partner');
+      const prevAnswer = answers[answers.length - 1];
+      if (prevAnswer) {
+        setMyAnswer(prevAnswer.myAnswer);
+        setPartnerAnswer(prevAnswer.partnerAnswer);
+        setAnswers(answers.slice(0, -1));
+      }
     }
   };
 
@@ -111,22 +130,22 @@ export default function ScenariosPage() {
 
       {/* Question */}
       <div className="flex-1 animate-slide-up" key={`${currentQ}-${phase}`}>
-        <div className="card mb-4 !border-none" style={{ background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.06), rgba(244, 63, 94, 0.04))' }}>
+        <div className="card mb-4 !border-none" style={{ background: 'linear-gradient(135deg, rgba(232, 132, 44, 0.06), rgba(255, 107, 107, 0.04))' }}>
           <p className="text-xs font-semibold text-primary mb-1">{question.category}</p>
-          <h2 className="text-lg font-bold">{question.question}</h2>
+          <h2 className="text-lg font-bold">{phase === 'partner' ? question.partnerQuestion : question.question}</h2>
           <p className="text-xs text-accent mt-2">可複選 ✨</p>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-3 stagger-children">
           {question.options.map((option, idx) => (
             <button
               key={idx}
-              className={`option-card flex items-center gap-3 ${selectedValues.includes(idx) ? 'selected' : ''}`}
+              className={`option-card flex items-center gap-3 animate-slide-up ${selectedValues.includes(idx) ? 'selected' : ''}`}
               onClick={() => toggleOption(idx)}
             >
               <span className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all" style={{
                 borderColor: selectedValues.includes(idx) ? 'var(--primary)' : 'var(--border)',
-                background: selectedValues.includes(idx) ? 'linear-gradient(135deg, #7C3AED, #F43F5E)' : 'transparent',
+                background: selectedValues.includes(idx) ? 'linear-gradient(135deg, #E8842C, #FF6B6B)' : 'transparent',
               }}>
                 {selectedValues.includes(idx) && <span className="text-white text-xs">✓</span>}
               </span>
@@ -136,13 +155,23 @@ export default function ScenariosPage() {
         </div>
       </div>
 
-      <button
-        className="btn-primary flex items-center justify-center gap-2 mt-6"
-        onClick={handleNext}
-        disabled={selectedValues.length === 0}
-      >
-        {phase === 'my' ? '接下來：對方的理想選擇 →' : currentQ < week1Questions.length - 1 ? '下一題 →' : '完成情境題 ✅'}
-      </button>
+      <div className="flex gap-3 mt-6">
+        {(currentQ > 0 || phase === 'partner') && (
+          <button
+            className="btn-secondary flex items-center justify-center gap-2 flex-1"
+            onClick={handleBack}
+          >
+            <ArrowLeft size={16} /> 上一步
+          </button>
+        )}
+        <button
+          className="btn-primary flex items-center justify-center gap-2 flex-1"
+          onClick={handleNext}
+          disabled={selectedValues.length === 0}
+        >
+          {phase === 'my' ? '接下來：對方的理想選擇 →' : currentQ < week1Questions.length - 1 ? '下一題 →' : '完成情境題 ✅'}
+        </button>
+      </div>
     </div>
   );
 }
