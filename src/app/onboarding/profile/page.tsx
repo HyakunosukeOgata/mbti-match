@@ -16,7 +16,7 @@ export default function ProfilePage() {
 
   const [photos, setPhotos] = useState<string[]>(currentUser?.photos || []);
   const [bio, setBio] = useState(currentUser?.bio || '');
-  const [nickname, setNickname] = useState('');
+  const [nickname, setNickname] = useState(currentUser?.name || '');
   const [birthYear, setBirthYear] = useState<number | ''>('');
   const [birthMonth, setBirthMonth] = useState<number | ''>('');
   const [birthDay, setBirthDay] = useState<number | ''>('');

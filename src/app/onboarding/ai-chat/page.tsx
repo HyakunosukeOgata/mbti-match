@@ -73,7 +73,9 @@ export default function AIOnboardingChatPage() {
             lifePace: r.lifePace || 'moderate',
             emotionalDepth: typeof r.emotionalDepth === 'number' ? r.emotionalDepth : 50,
           };
+          const savedName = parsed.name ? String(parsed.name) : undefined;
           updateProfile({
+            ...(savedName ? { name: savedName } : {}),
             aiPersonality: {
               bio: String(r.bio || ''),
               traits: Array.isArray(r.traits) ? r.traits : [],

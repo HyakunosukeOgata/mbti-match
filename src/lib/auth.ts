@@ -44,6 +44,11 @@ export async function signInWithPassword(email: string, password: string) {
   return { data, error };
 }
 
+export async function signInAnonymously() {
+  const { data, error } = await supabase.auth.signInAnonymously();
+  return { data, error };
+}
+
 export async function getSession() {
   const { data, error } = await supabase.auth.getSession();
   return { session: data.session, error };
