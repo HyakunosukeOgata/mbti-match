@@ -50,6 +50,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '無法喜歡自己' }, { status: 400 });
   }
 
+  // Check if target user has blocked the current user
+  const { data: blockedByTarget } = await adminClient
+    .from('blocked_users')
+    .select('id')
+    .eq('blocker_id', targetUserDbId)
+    .eq('blocked_id', currentUserRow.id)
+    .maybeSingle();
+
+  if (blockedByTarget) {
+    return NextResponse.json({ error: '操作失敗' }, { status: 403 });
+  }
+
   await adminClient.from('likes').upsert({
     from_user_id: currentUserRow.id,
     to_user_id: targetUserDbId,

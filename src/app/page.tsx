@@ -257,8 +257,9 @@ export default function LoginPage() {
             {!emailSent ? (
               <>
                 <div>
-                  <label className="text-xs text-text-secondary mb-1 block">Email</label>
+                  <label htmlFor="email-input" className="text-xs text-text-secondary mb-1 block">Email</label>
                   <input
+                    id="email-input"
                     type="email"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
@@ -266,6 +267,7 @@ export default function LoginPage() {
                     className="w-full px-4 py-3 rounded-2xl text-sm outline-none transition-all"
                     style={{ border: '1px solid #E8DDD5', background: '#FFFAF7' }}
                     autoFocus
+                    autoComplete="email"
                     onKeyDown={e => { if (e.key === 'Enter') handleSendEmail(); }}
                   />
                   <p className="text-[11px] text-text-secondary opacity-60 mt-1">我們會寄一封驗證信到你的信箱</p>

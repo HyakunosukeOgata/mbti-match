@@ -441,6 +441,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const activeSession = sessionRef.current;
     if (!activeSession?.user) return;
 
+    // Server-side age validation: reject under 18
+    if (typeof updated.age === 'number' && updated.age < 18) return;
+
     const { data, error } = await supabase.from('users').upsert({
       auth_id: activeSession.user.id,
       email: activeSession.user.email,
