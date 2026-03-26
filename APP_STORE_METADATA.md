@@ -80,7 +80,7 @@ This is a personality-based dating app that matches users based on their MBTI pe
 4. Chat: Matched users can communicate with guided conversation topics
 5. Safety: Report/block functionality, content moderation
 
-Demo account: Enter any name on the login screen to create a test account.
+Reviewer test flow: use Apple Sign In, Google Sign In, or phone OTP on the login screen. The app uses real Supabase authentication and does not provide a fake demo account.
 
 ### 聯絡資訊
 

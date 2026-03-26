@@ -8,7 +8,7 @@ import { track } from '@/lib/analytics';
 import { TAIWAN_CITIES } from '@/lib/types';
 
 export default function PreferencesPage() {
-  const { currentUser, updateProfile } = useApp();
+  const { currentUser, authReady, updateProfile } = useApp();
   const router = useRouter();
 
   const [ageMin, setAgeMin] = useState(currentUser?.preferences.ageMin || 20);
@@ -23,14 +23,26 @@ export default function PreferencesPage() {
   const [toast, setToast] = useState('');
 
   useEffect(() => {
+    if (!currentUser) return;
+    setAgeMin(currentUser.preferences.ageMin || 20);
+    setAgeMax(currentUser.preferences.ageMax || 35);
+    setGenderPref(currentUser.preferences.genderPreference || []);
+    setRegion(currentUser.preferences.region || '台北市');
+    setPreferredRegions(currentUser.preferences.preferredRegions || []);
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!authReady) return;
     if (!currentUser) {
       router.replace('/');
+    } else if (!currentUser.onboardingComplete) {
+      router.replace('/onboarding/ai-chat');
     } else {
       track('page_view', { page: 'preferences' });
     }
-  }, [currentUser, router]);
+  }, [authReady, currentUser, router]);
 
-  if (!currentUser) return null;
+  if (!authReady || !currentUser) return null;
 
   const toggleGenderPref = (g: string) => {
     setGenderPref(prev => {
@@ -39,12 +51,12 @@ export default function PreferencesPage() {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const clampedMin = Math.max(18, Math.min(60, Math.min(ageMin, ageMax)));
     const clampedMax = Math.max(clampedMin, Math.min(60, Math.max(ageMin, ageMax)));
     setAgeMin(clampedMin);
     setAgeMax(clampedMax);
-    updateProfile({
+    await updateProfile({
       preferences: {
         ageMin: clampedMin,
         ageMax: clampedMax,
@@ -125,25 +137,34 @@ export default function PreferencesPage() {
 
         <div>
           <label className="text-sm font-semibold text-text mb-3 block">📍 希望配對的縣市</label>
-          <div className="flex flex-wrap gap-2">
-            {TAIWAN_CITIES.map(r => (
-              <button
-                key={r}
-                className={`strength-btn !py-2.5 !px-3 !text-xs ${preferredRegions.includes(r) ? 'active' : ''}`}
-                onClick={() => setPreferredRegions(prev => prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r])}
-              >
-                {r}
-              </button>
-            ))}
+          <div className="grid grid-cols-3 gap-2">
+            {TAIWAN_CITIES.map(r => {
+              const selected = preferredRegions.includes(r);
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setPreferredRegions(prev => selected ? prev.filter(x => x !== r) : [...prev, r])}
+                  className="py-2 px-3 rounded-xl text-sm font-medium transition-all"
+                  style={{
+                    background: selected ? 'var(--primary)' : 'var(--bg-input)',
+                    color: selected ? '#fff' : 'var(--text)',
+                    border: selected ? '1.5px solid var(--primary)' : '1.5px solid var(--border)',
+                  }}
+                >
+                  {r}
+                </button>
+              );
+            })}
           </div>
           {preferredRegions.length > 0 && (
             <p className="text-xs text-primary mt-2">已選 {preferredRegions.length} 個縣市</p>
           )}
-          <p className="text-xs text-text-secondary mt-1 opacity-60">可複選，不選 = 不限地區</p>
+          <p className="text-xs text-text-secondary mt-1 opacity-60">不選 = 不限地區</p>
         </div>
 
         {/* Info */}
-        <div className="p-4 rounded-2xl" style={{ background: 'rgba(232, 132, 44, 0.05)' }}>
+        <div className="p-4 rounded-2xl" style={{ background: 'rgba(255, 140, 107, 0.05)' }}>
           <p className="text-xs text-text-secondary leading-relaxed">
             💡 調整偏好後，系統會在下一次推薦時根據新設定為你配對。目前的配對和聊天不受影響。
           </p>

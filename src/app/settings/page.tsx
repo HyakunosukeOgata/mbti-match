@@ -5,34 +5,42 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import BottomNav from '@/components/BottomNav';
 import React from 'react';
-import { LogOut, User, Sliders, Shield, ChevronRight, Camera, BarChart3, Trash2, Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react';
+import { LogOut, Sliders, Shield, ChevronRight, Camera, Trash2, Eye, RefreshCw } from 'lucide-react';
 import { track } from '@/lib/analytics';
-import { getAnalyticsSummary } from '@/lib/analytics';
-import { getAnalyticsConsent, setAnalyticsConsent } from '@/components/ConsentBanner';
+import { moderateBio, moderateName } from '@/lib/moderation';
 import { TAIWAN_CITIES } from '@/lib/types';
+import { compressImage } from '@/lib/compressImage';
 
 export default function SettingsPage() {
-  const { currentUser, updateProfile, logout } = useApp();
+  const { currentUser, authReady, updateProfile, logout, deleteAccount } = useApp();
   const router = useRouter();
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [editMode, setEditMode] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [photos, setPhotos] = useState<string[]>(currentUser?.photos || []);
   const [bio, setBio] = useState(currentUser?.bio || '');
   const [editName, setEditName] = useState(currentUser?.name || '');
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteInput, setDeleteInput] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [toast, setToast] = useState('');
+  const [profileVisible, setProfileVisible] = useState(true);
+  const [hideAge, setHideAge] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
 
   useEffect(() => {
+    if (!authReady) return;
     if (!currentUser) {
       router.replace('/');
+    } else if (!currentUser.onboardingComplete) {
+      router.replace('/onboarding/ai-chat');
     } else {
       track('page_view', { page: 'settings' });
     }
-  }, [currentUser, router]);
-
-  if (!currentUser) return null;
-
+  }, [authReady, currentUser, router]);
   const MAX_PHOTOS = 6;
-
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleAddPhoto = () => {
     if (photos.length >= MAX_PHOTOS) return;
@@ -46,18 +54,16 @@ export default function SettingsPage() {
       showToast('❌ 請選擇圖片檔案');
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      showToast('❌ 照片不可超過 2MB');
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('❌ 照片不可超過 5MB');
       e.target.value = '';
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setPhotos(prev => [...prev, reader.result as string]);
-      }
-    };
-    reader.readAsDataURL(file);
+    compressImage(file).then(dataUrl => {
+      setPhotos(prev => [...prev, dataUrl]);
+    }).catch(() => {
+      showToast('❌ 照片處理失敗');
+    });
     e.target.value = '';
   };
 
@@ -65,56 +71,48 @@ export default function SettingsPage() {
     setPhotos(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const handleSave = () => {
+  const handleSetMainPhoto = (idx: number) => {
+    if (idx === 0) return;
+    setPhotos(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(idx, 1);
+      next.unshift(moved);
+      return next;
+    });
+  };
+
+  const handleSave = async () => {
+    if (savingProfile) return;
+
     const trimmedName = editName.trim();
     if (!trimmedName || trimmedName.length < 1 || trimmedName.length > 20) {
       showToast('❗ 昵稱需為 1-20 字');
       return;
     }
-    updateProfile({
-      name: trimmedName,
-      photos,
-      bio,
-    });
-    setEditMode(false);
-    showToast('✅ 已儲存');
-  };
-
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleteInput, setDeleteInput] = useState('');
-  const [toast, setToast] = useState('');
-  const [profileVisible, setProfileVisible] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    return localStorage.getItem('mochi_profile_visible') !== 'false';
-  });
-  const [hideAge, setHideAge] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem('mochi_hide_age') === 'true';
-  });
-  const [showBlockedList, setShowBlockedList] = useState(false);
-  const [showPrivacyPanel, setShowPrivacyPanel] = useState(false);
-  const [showVerifyPanel, setShowVerifyPanel] = useState(false);
-
-  // Get blocked users from localStorage
-  const getBlockedUsers = () => {
-    if (typeof window === 'undefined') return [];
-    const raw = localStorage.getItem('mochi_blocked_users');
-    return raw ? JSON.parse(raw) : [];
-  };
-  const getBlockedNames = (): Record<string, string> => {
-    if (typeof window === 'undefined') return {};
-    const raw = localStorage.getItem('mochi_blocked_names');
-    return raw ? JSON.parse(raw) : {};
-  };
-  const [blockedUsers, setBlockedUsers] = useState<string[]>(getBlockedUsers);
-  const [blockedNames] = useState<Record<string, string>>(getBlockedNames);
-
-  const unblockUser = (userId: string) => {
-    const updated = blockedUsers.filter(id => id !== userId);
-    setBlockedUsers(updated);
-    localStorage.setItem('mochi_blocked_users', JSON.stringify(updated));
-    showToast('✅ 已解除封鎖');
+    const nameCheck = moderateName(trimmedName);
+    if (!nameCheck.allowed) {
+      showToast(`❌ ${nameCheck.reason || '暱稱不符合規範'}`);
+      return;
+    }
+    if (bio.trim()) {
+      const bioCheck = moderateBio(bio);
+      if (!bioCheck.allowed) {
+        showToast(`❌ ${bioCheck.reason || '自我介紹不符合規範'}`);
+        return;
+      }
+    }
+    setSavingProfile(true);
+    try {
+      await updateProfile({
+        name: trimmedName,
+        photos,
+        bio,
+      });
+      setEditMode(false);
+      showToast('✅ 已儲存');
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const showToast = (msg: string) => {
@@ -122,13 +120,28 @@ export default function SettingsPage() {
     setTimeout(() => setToast(''), 2000);
   };
 
+  useEffect(() => {
+    if (!currentUser) return;
+    setPhotos(currentUser.photos || []);
+    setBio(currentUser.bio || '');
+    setEditName(currentUser.name || '');
+    setProfileVisible(currentUser.profileVisible ?? true);
+    setHideAge(currentUser.hideAge ?? false);
+  }, [currentUser]);
+
+  if (!authReady || !currentUser) return null;
+
   const handleLogout = () => {
     setShowLogoutConfirm(true);
   };
 
-  const confirmLogout = () => {
+  const previewName = editMode ? (editName.trim() || currentUser.name) : currentUser.name;
+  const previewBio = editMode ? bio : currentUser.bio;
+  const previewPhotos = editMode ? photos : currentUser.photos;
+
+  const confirmLogout = async () => {
     setShowLogoutConfirm(false);
-    logout();
+    await logout();
     // Use window.location for reliable redirect after state clear
     window.location.href = '/';
   };
@@ -143,24 +156,26 @@ export default function SettingsPage() {
 
       <div className="px-6 space-y-5">
         {/* Profile card */}
-        <div className="card !border-none overflow-hidden relative" style={{ background: 'linear-gradient(135deg, rgba(232, 132, 44, 0.08), rgba(255, 107, 107, 0.05))' }}>
+        <div className="card !border-none overflow-hidden relative" style={{ background: 'linear-gradient(135deg, rgba(255, 140, 107, 0.08), rgba(255, 107, 107, 0.05))' }}>
           {/* Decorative gradient orb */}
           <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-20 blur-2xl pointer-events-none" style={{ background: 'linear-gradient(135deg, var(--gradient-start), var(--gradient-end))' }} />
           <div className="relative flex items-center gap-4 mb-4">
             {currentUser.photos.length > 0 ? (
-              <div className="w-18 h-18 rounded-2xl overflow-hidden ring-2 ring-primary/20 ring-offset-2" style={{ boxShadow: '0 4px 20px rgba(232, 132, 44, 0.25)', width: 72, height: 72 }}>
+              <div className="w-18 h-18 rounded-2xl overflow-hidden ring-2 ring-primary/20 ring-offset-2" style={{ boxShadow: '0 4px 20px rgba(255, 140, 107, 0.25)', width: 72, height: 72 }}>
                 <img src={currentUser.photos[0]} alt={currentUser.name} className="w-full h-full object-cover" />
               </div>
             ) : (
-              <div className="flex items-center justify-center text-2xl font-bold text-white gradient-bg ring-2 ring-primary/20 ring-offset-2" style={{ boxShadow: '0 4px 20px rgba(232, 132, 44, 0.25)', width: 72, height: 72, borderRadius: 16 }}>
+              <div className="flex items-center justify-center text-2xl font-bold text-white gradient-bg ring-2 ring-primary/20 ring-offset-2" style={{ boxShadow: '0 4px 20px rgba(255, 140, 107, 0.25)', width: 72, height: 72, borderRadius: 16 }}>
                 {currentUser.name.charAt(0)}
               </div>
             )}
             <div className="flex-1 min-w-0">
               <p className="font-bold text-lg truncate">{currentUser.name}</p>
               <div className="flex items-center gap-2 mt-1.5">
-                <span className="mbti-badge">{currentUser.mbtiCode}</span>
                 <span className="text-sm text-text-secondary">{currentUser.age}歲</span>
+                {currentUser.aiPersonality?.values.slice(0, 2).map((v, i) => (
+                  <span key={i} className="personality-badge text-[10px]">{v}</span>
+                ))}
               </div>
             </div>
           </div>
@@ -182,6 +197,12 @@ export default function SettingsPage() {
                 }}
               >
                 ✏️ 編輯個人資料
+              </button>
+              <button
+                className="btn-secondary text-sm w-full mt-2 flex items-center justify-center gap-1.5"
+                onClick={() => setShowPreview(true)}
+              >
+                <Eye size={15} /> 預覽個人檔案
               </button>
             </>
           ) : (
@@ -219,11 +240,16 @@ export default function SettingsPage() {
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
                       <button
                         onClick={() => handleRemovePhoto(idx)}
-                        className="absolute -top-1 -right-1 w-8 h-8 min-w-[44px] min-h-[44px] rounded-full bg-black/60 text-white text-xs flex items-center justify-center opacity-80 hover:opacity-100 hover:bg-red-500 transition-all"
+                        className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-black/60 text-white text-xs flex items-center justify-center opacity-80 hover:opacity-100 hover:bg-red-500 transition-all"
                         aria-label={`刪除照片 ${idx + 1}`}
                       >✕</button>
-                      {idx === 0 && (
+                      {idx === 0 ? (
                         <span className="absolute bottom-1.5 left-1.5 text-[11px] font-bold text-white bg-black/50 px-2 py-0.5 rounded-full">主照片</span>
+                      ) : (
+                        <button
+                          onClick={() => handleSetMainPhoto(idx)}
+                          className="absolute bottom-1.5 left-1.5 text-[11px] font-medium text-white bg-black/40 hover:bg-primary px-2 py-0.5 rounded-full transition-colors"
+                        >設為主照</button>
                       )}
                     </div>
                   ))}
@@ -264,8 +290,8 @@ export default function SettingsPage() {
                 <button className="btn-secondary flex-1 text-sm" onClick={() => { setPhotos(currentUser.photos); setBio(currentUser.bio); setEditName(currentUser.name); setEditMode(false); }}>
                   取消
                 </button>
-                <button className="btn-primary flex-1 text-sm" onClick={handleSave}>
-                  💾 儲存變更
+                <button className="btn-primary flex-1 text-sm" onClick={handleSave} disabled={savingProfile}>
+                  {savingProfile ? '儲存中...' : '💾 儲存變更'}
                 </button>
               </div>
             </div>
@@ -279,7 +305,7 @@ export default function SettingsPage() {
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(232, 132, 44, 0.08)' }}>
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255, 140, 107, 0.08)' }}>
                 <Sliders size={15} className="text-primary" />
               </div>
               <h3 className="font-bold">💕 配對偏好</h3>
@@ -291,127 +317,84 @@ export default function SettingsPage() {
           </div>
         </button>
 
-        {/* Safety */}
+        <button
+          className="card w-full text-left group"
+          onClick={() => router.push('/onboarding/ai-chat?mode=reset')}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255, 140, 107, 0.08)' }}>
+                <RefreshCw size={15} className="text-primary" />
+              </div>
+              <div>
+                <h3 className="font-bold">重新聊天分析</h3>
+                <p className="text-xs text-text-secondary mt-0.5">保留照片與自介，只更新個性分析結果</p>
+              </div>
+            </div>
+            <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform text-text-secondary" />
+          </div>
+        </button>
+
+        {/* Privacy settings */}
         <div className="card">
           <div className="flex items-center gap-2.5 mb-4">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(232, 132, 44, 0.08)' }}>
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255, 140, 107, 0.08)' }}>
               <Shield size={15} className="text-primary" />
             </div>
-            <h3 className="font-bold">🔒 安全與隱私</h3>
+            <h3 className="font-bold">🔒 隱私設定</h3>
           </div>
-          <div className="space-y-0.5">
-            <button
-              className="w-full flex items-center justify-between py-3 px-3 text-sm hover:text-text rounded-xl hover:bg-bg-input transition-colors group"
-              onClick={() => setShowBlockedList(true)}
-            >
-              <div className="flex items-center gap-3">
-                <XCircle size={16} className="text-text-secondary/60" />
-                <span>封鎖名單</span>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">個人檔案可見</p>
+                <p className="text-xs text-text-secondary mt-0.5">關閉後不會出現在他人的推薦中</p>
               </div>
-              <div className="flex items-center gap-2">
-                {blockedUsers.length > 0 && (
-                  <span className="text-xs bg-danger/10 text-danger px-2 py-0.5 rounded-full font-medium">{blockedUsers.length}</span>
-                )}
-                <ChevronRight size={16} className="text-text-secondary/40 group-hover:translate-x-0.5 transition-transform" />
+              <button
+                onClick={async () => {
+                  const next = !profileVisible;
+                  setProfileVisible(next);
+                  await updateProfile({ profileVisible: next });
+                  showToast(next ? '✅ 已恢復顯示' : '⏸️ 已隱藏檔案');
+                }}
+                role="switch"
+                aria-checked={profileVisible}
+                aria-label="個人檔案可見"
+                className="p-2 -m-2"
+              >
+                <div className={`w-12 h-7 rounded-full transition-colors relative ${profileVisible ? 'bg-green-500' : 'bg-gray-300'}`}>
+                  <div className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${profileVisible ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+                </div>
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">隱藏年齡</p>
+                <p className="text-xs text-text-secondary mt-0.5">他人將看不到你的年齡</p>
               </div>
-            </button>
-            <button
-              className="w-full flex items-center justify-between py-3 px-3 text-sm hover:text-text rounded-xl hover:bg-bg-input transition-colors group"
-              onClick={() => setShowPrivacyPanel(true)}
-            >
-              <div className="flex items-center gap-3">
-                {profileVisible ? <Eye size={16} className="text-text-secondary/60" /> : <EyeOff size={16} className="text-warning" />}
-                <span>隱私設定</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {!profileVisible && <span className="text-xs bg-warning/10 text-warning px-2 py-0.5 rounded-full font-medium">已暫停</span>}
-                <ChevronRight size={16} className="text-text-secondary/40 group-hover:translate-x-0.5 transition-transform" />
-              </div>
-            </button>
-            <button
-              className="w-full flex items-center justify-between py-3 px-3 text-sm hover:text-text rounded-xl hover:bg-bg-input transition-colors group"
-              onClick={() => setShowVerifyPanel(true)}
-            >
-              <div className="flex items-center gap-3">
-                <CheckCircle size={16} className="text-text-secondary/60" />
-                <span>身份驗證</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">即將開放</span>
-                <ChevronRight size={16} className="text-text-secondary/40 group-hover:translate-x-0.5 transition-transform" />
-              </div>
-            </button>
+              <button
+                onClick={async () => {
+                  const next = !hideAge;
+                  setHideAge(next);
+                  await updateProfile({ hideAge: next });
+                  showToast(next ? '🙈 已隱藏年齡' : '✅ 已顯示年齡');
+                }}
+                role="switch"
+                aria-checked={hideAge}
+                aria-label="隱藏年齡"
+                className="p-2 -m-2"
+              >
+                <div className={`w-12 h-7 rounded-full transition-colors relative ${hideAge ? 'bg-green-500' : 'bg-gray-300'}`}>
+                  <div className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${hideAge ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+                </div>
+              </button>
+            </div>
+            <div className="pt-3 border-t border-border">
+              <p className="text-xs text-text-secondary">
+                💡 暫停檔案後，你的現有配對和聊天不會受影響，只是不會出現在新的推薦中。
+              </p>
+            </div>
           </div>
         </div>
-
-        {/* Analytics */}
-        {(() => {
-          const consent = getAnalyticsConsent();
-          const summary = consent ? getAnalyticsSummary() : null;
-          return (
-            <div className="card">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(232, 132, 44, 0.08)' }}>
-                    <BarChart3 size={15} className="text-primary" />
-                  </div>
-                  <h3 className="font-bold">📊 使用統計</h3>
-                </div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <span className="text-xs text-text-secondary">{consent ? '已開啟' : '已關閉'}</span>
-                  <input
-                    type="checkbox"
-                    checked={consent === true}
-                    onChange={(e) => { setAnalyticsConsent(e.target.checked); router.refresh(); }}
-                    className="w-4 h-4 accent-purple-600"
-                  />
-                </label>
-              </div>
-              {summary ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3.5 rounded-xl" style={{ background: 'rgba(232, 132, 44, 0.06)' }}>
-                      <p className="text-2xl font-bold text-primary leading-none">{summary.today.likes}</p>
-                      <p className="text-[11px] text-text-secondary mt-1.5 font-medium">💜 今日喜歡</p>
-                    </div>
-                    <div className="p-3.5 rounded-xl" style={{ background: 'rgba(16, 185, 129, 0.06)' }}>
-                      <p className="text-2xl font-bold text-success leading-none">{summary.today.matches}</p>
-                      <p className="text-[11px] text-text-secondary mt-1.5 font-medium">✨ 今日配對</p>
-                    </div>
-                    <div className="p-3.5 rounded-xl" style={{ background: 'rgba(236, 72, 153, 0.06)' }}>
-                      <p className="text-2xl font-bold leading-none" style={{ color: '#F4A261' }}>{summary.today.messages}</p>
-                      <p className="text-[11px] text-text-secondary mt-1.5 font-medium">💬 今日訊息</p>
-                    </div>
-                    <div className="p-3.5 rounded-xl" style={{ background: 'rgba(245, 158, 11, 0.06)' }}>
-                      <p className="text-2xl font-bold leading-none" style={{ color: '#F59E0B' }}>{summary.week.pageViews}</p>
-                      <p className="text-[11px] text-text-secondary mt-1.5 font-medium">👀 本週瀏覽</p>
-                    </div>
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-border">
-                    <div className="flex justify-around text-center">
-                      <div>
-                        <p className="text-sm font-bold">{summary.week.likes}</p>
-                        <p className="text-[11px] text-text-secondary mt-0.5">週喜歡</p>
-                      </div>
-                      <div className="w-px bg-border" />
-                      <div>
-                        <p className="text-sm font-bold">{summary.week.skips}</p>
-                        <p className="text-[11px] text-text-secondary mt-0.5">週跳過</p>
-                      </div>
-                      <div className="w-px bg-border" />
-                      <div>
-                        <p className="text-sm font-bold">{summary.week.matches}</p>
-                        <p className="text-[11px] text-text-secondary mt-0.5">週配對</p>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <p className="text-xs text-text-secondary">開啟統計以追蹤你的使用數據（資料僅儲存在本機）</p>
-              )}
-            </div>
-          );
-        })()}
 
         {/* Logout & Danger zone */}
         <div className="pt-2">
@@ -435,163 +418,14 @@ export default function SettingsPage() {
 
         {/* Legal links */}
         <div className="flex justify-center gap-4 pt-4 pb-6">
+          <a href="/faq" className="text-xs text-text-secondary hover:text-primary transition-colors">常見問題</a>
+          <span className="text-xs text-border">·</span>
           <a href="/privacy" className="text-xs text-text-secondary hover:text-primary transition-colors">隱私權政策</a>
           <span className="text-xs text-border">·</span>
           <a href="/terms" className="text-xs text-text-secondary hover:text-primary transition-colors">服務條款</a>
           <span className="text-xs text-border">·</span>
           <a href="/support" className="text-xs text-text-secondary hover:text-primary transition-colors">聯絡我們</a>
         </div>
-
-        {/* Blocked list panel */}
-        {showBlockedList && (
-          <div className="fixed inset-0 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.4)', zIndex: 200 }} onClick={() => setShowBlockedList(false)}>
-            <div className="w-full max-w-lg rounded-t-3xl shadow-xl animate-slide-up max-h-[70vh] flex flex-col" style={{ background: 'var(--bg-card)' }} onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-                <h3 className="font-bold text-lg">🚫 封鎖名單</h3>
-                <button onClick={() => setShowBlockedList(false)} className="text-text-secondary hover:text-text p-2 rounded-xl transition-colors">✕</button>
-              </div>
-              <div className="flex-1 overflow-y-auto px-6 py-4">
-                {blockedUsers.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-4">
-                      <CheckCircle size={28} className="text-green-500" />
-                    </div>
-                    <p className="text-text-secondary text-sm">沒有封鎖任何人</p>
-                    <p className="text-text-secondary text-xs mt-1 opacity-60">你可以在聊天中封鎖不適當的用戶</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {blockedUsers.map((userId: string, idx: number) => {
-                      const displayName = blockedNames[userId] || userId;
-                      return (
-                        <div key={idx} className="flex items-center justify-between py-3 px-4 rounded-2xl bg-gray-50">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-sm font-bold text-purple-700">
-                              {displayName.charAt(0).toUpperCase()}
-                            </div>
-                            <span className="text-sm font-medium">{displayName}</span>
-                          </div>
-                          <button
-                            onClick={() => unblockUser(userId)}
-                            className="text-xs text-primary font-medium px-3 py-1.5 rounded-full hover:bg-purple-50 transition-colors"
-                          >
-                            解除封鎖
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Privacy settings panel */}
-        {showPrivacyPanel && (
-          <div className="fixed inset-0 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.4)', zIndex: 200 }} onClick={() => setShowPrivacyPanel(false)}>
-            <div className="w-full max-w-lg rounded-t-3xl shadow-xl animate-slide-up" style={{ background: 'var(--bg-card)' }} onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-                <h3 className="font-bold text-lg">🔒 隱私設定</h3>
-                <button onClick={() => setShowPrivacyPanel(false)} className="text-text-secondary hover:text-text p-2 rounded-xl transition-colors">✕</button>
-              </div>
-              <div className="px-6 py-5 space-y-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">個人檔案可見</p>
-                    <p className="text-xs text-text-secondary mt-0.5">關閉後不會出現在他人的推薦中</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const next = !profileVisible;
-                      setProfileVisible(next);
-                      localStorage.setItem('mochi_profile_visible', String(next));
-                      showToast(next ? '✅ 已恢復顯示' : '⏸️ 已隱藏檔案');
-                    }}
-                    role="switch"
-                    aria-checked={profileVisible}
-                    aria-label="個人檔案可見"
-                    className={`w-12 h-7 min-w-[48px] min-h-[44px] rounded-full transition-colors relative flex items-center ${profileVisible ? 'bg-green-500' : 'bg-gray-300'}`}
-                  >
-                    <div className={`absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white shadow transition-transform ${profileVisible ? 'translate-x-5.5' : 'translate-x-0.5'}`} />
-                  </button>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">隱藏年齡</p>
-                    <p className="text-xs text-text-secondary mt-0.5">他人將看不到你的年齡</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const next = !hideAge;
-                      setHideAge(next);
-                      localStorage.setItem('mochi_hide_age', String(next));
-                      showToast(next ? '🙈 已隱藏年齡' : '✅ 已顯示年齡');
-                    }}
-                    role="switch"
-                    aria-checked={hideAge}
-                    aria-label="隱藏年齡"
-                    className={`w-12 h-7 min-w-[48px] min-h-[44px] rounded-full transition-colors relative flex items-center ${hideAge ? 'bg-green-500' : 'bg-gray-300'}`}
-                  >
-                    <div className={`absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white shadow transition-transform ${hideAge ? 'translate-x-5.5' : 'translate-x-0.5'}`} />
-                  </button>
-                </div>
-                <div className="pt-3 border-t border-border">
-                  <p className="text-xs text-text-secondary">
-                    💡 暫停檔案後，你的現有配對和聊天不會受影響，只是不會出現在新的推薦中。
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Verification panel */}
-        {showVerifyPanel && (
-          <div className="fixed inset-0 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.4)', zIndex: 200 }} onClick={() => setShowVerifyPanel(false)}>
-            <div className="w-full max-w-lg rounded-t-3xl shadow-xl animate-slide-up" style={{ background: 'var(--bg-card)' }} onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-                <h3 className="font-bold text-lg">✅ 身份驗證</h3>
-                <button onClick={() => setShowVerifyPanel(false)} className="text-text-secondary hover:text-text p-2 rounded-xl transition-colors">✕</button>
-              </div>
-              <div className="px-6 py-5">
-                <div className="text-center py-4">
-                  <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4">
-                    <Shield size={40} className="text-blue-400" />
-                  </div>
-                  <p className="font-bold text-lg mb-1">即將開放</p>
-                  <p className="text-sm text-text-secondary">身份驗證功能正在開發中</p>
-                </div>
-                <div className="mt-4 space-y-3">
-                  <div className="flex items-center gap-3 p-3 rounded-2xl bg-gray-50">
-                    <Shield size={18} className="text-gray-400 shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-text-secondary">Email 驗證</p>
-                      <p className="text-xs text-text-secondary">確認 email 所有權</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 p-3 rounded-2xl bg-gray-50">
-                    <Shield size={18} className="text-gray-400 shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-text-secondary">照片驗證</p>
-                      <p className="text-xs text-text-secondary">確認為本人照片</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 p-3 rounded-2xl bg-gray-50">
-                    <Shield size={18} className="text-gray-400 shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-text-secondary">進階驗證（選填）</p>
-                      <p className="text-xs text-text-secondary">提供身分證件以獲得藍勾標記</p>
-                    </div>
-                  </div>
-                </div>
-                <p className="text-xs text-text-secondary text-center mt-5 opacity-60">
-                  我們正在開發安全驗證系統，敲請期待 🙏
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Logout confirm modal */}
         {showLogoutConfirm && (
@@ -637,26 +471,21 @@ export default function SettingsPage() {
                 <button
                   className="btn-primary flex-1 text-sm"
                   style={deleteInput === '刪除' ? { background: '#DC2626', boxShadow: '0 4px 15px rgba(220, 38, 38, 0.35)' } : { background: '#9CA3AF', boxShadow: 'none' }}
-                  disabled={deleteInput !== '刪除'}
-                  onClick={() => {
-                    setShowDeleteConfirm(false);
-                    setDeleteInput('');
-                    // Delete all user data completely
-                    const keysToRemove = [
-                      'mbti-match-user', 'mbti-match-daily', 'mbti-match-matches',
-                      'mbti-match-likes', 'mbti-match-skipped', 'mochi_analytics_consent',
-                      'mochi_blocked_users', 'mochi_blocked_names', 'mochi_reports',
-                      'mochi_analytics', 'mochi_profile_visible', 'mochi_hide_age',
-                    ];
-                    keysToRemove.forEach(k => localStorage.removeItem(k));
-                    if ('caches' in window) {
-                      caches.delete('mochi-v1').catch(() => {});
+                  disabled={deleteInput !== '刪除' || deleting}
+                  onClick={async () => {
+                    setDeleting(true);
+                    const ok = await deleteAccount();
+                    setDeleting(false);
+                    if (ok) {
+                      window.location.href = '/';
+                    } else {
+                      setShowDeleteConfirm(false);
+                      setDeleteInput('');
+                      showToast('❌ 刪除失敗，請稍後再試');
                     }
-                    logout();
-                    window.location.href = '/';
                   }}
                 >
-                  永久刪除
+                  {deleting ? '刪除中...' : '永久刪除'}
                 </button>
               </div>
             </div>
@@ -672,6 +501,103 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {/* Profile Preview Modal */}
+      {showPreview && (
+        <div className="fixed inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)', zIndex: 200 }} onClick={() => setShowPreview(false)}>
+          <div className="mx-4 max-w-sm w-full max-h-[85dvh] overflow-y-auto rounded-3xl shadow-2xl animate-scale-in" style={{ background: 'var(--bg)' }} onClick={e => e.stopPropagation()}>
+            {/* Preview Header */}
+            <div className="px-5 pt-5 pb-3 flex items-center justify-between">
+              <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">👀 別人看到的你</p>
+              <button onClick={() => setShowPreview(false)} className="text-text-secondary hover:text-text text-sm font-medium">關閉</button>
+            </div>
+
+            {/* Photo */}
+            {previewPhotos.length > 0 ? (
+              <div className="mx-5 aspect-[4/5] rounded-2xl overflow-hidden">
+                <img src={previewPhotos[0]} alt={previewName} className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <div className="mx-5 aspect-[4/5] rounded-2xl flex items-center justify-center text-6xl font-bold text-white gradient-bg">
+                {previewName.charAt(0)}
+              </div>
+            )}
+
+            {/* Info */}
+            <div className="px-5 pt-4 pb-2">
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-xl font-bold">{previewName}</h2>
+                {!hideAge && <span className="text-text-secondary">{currentUser.age}歲</span>}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-sm text-text-secondary">{currentUser.preferences.region}</span>
+                {currentUser.aiPersonality?.values.slice(0, 2).map((v, i) => (
+                  <span key={i} className="personality-badge text-[10px]">{v}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* Bio */}
+            {previewBio ? (
+              <div className="mx-5 mt-2 p-3.5 rounded-xl" style={{ background: 'rgba(255,140,107,0.06)' }}>
+                <p className="text-sm leading-relaxed text-text">{previewBio}</p>
+              </div>
+            ) : (
+              <div className="mx-5 mt-2 p-3.5 rounded-xl" style={{ background: 'rgba(255,140,107,0.06)' }}>
+                <p className="text-sm text-text-secondary italic">尚未填寫自我介紹</p>
+              </div>
+            )}
+
+            {/* Additional photos */}
+            {previewPhotos.length > 1 && (
+              <div className="px-5 mt-3">
+                <div className="flex gap-2 overflow-x-auto">
+                  {previewPhotos.slice(1).map((p, i) => (
+                    <img key={i} src={p} alt={`照片 ${i + 2}`} className="w-20 h-20 rounded-xl object-cover shrink-0" />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* AI personality preview */}
+            {currentUser.aiPersonality && (
+              <div className="mx-5 mt-3 mb-5 space-y-3">
+                <div>
+                  <p className="text-xs font-semibold text-text-secondary mb-2">✨ 個性標籤</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(currentUser.aiPersonality.tags && currentUser.aiPersonality.tags.length > 0
+                      ? currentUser.aiPersonality.tags.slice(0, 6)
+                      : currentUser.aiPersonality.values.slice(0, 4)
+                    ).map((v, i) => (
+                      <span key={i} className="pill text-xs">{v}</span>
+                    ))}
+                  </div>
+                </div>
+                {currentUser.aiPersonality.datingStyle && (
+                  <div>
+                    <p className="text-xs font-semibold text-text-secondary mb-1">💕 交往風格</p>
+                    <p className="text-xs text-text">{currentUser.aiPersonality.datingStyle}</p>
+                  </div>
+                )}
+                {currentUser.aiPersonality.redFlags && currentUser.aiPersonality.redFlags.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-text-secondary mb-1">🚩 地雷</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {currentUser.aiPersonality.redFlags.map((rf, i) => (
+                        <span key={i} className="inline-flex items-center text-xs py-1 px-2.5 rounded-full font-medium" style={{ background: 'rgba(255,90,90,0.08)', color: 'var(--danger)' }}>
+                          {rf}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!currentUser.aiPersonality && <div className="h-5" />}
+          </div>
+        </div>
+      )}
 
       <BottomNav />
     </div>

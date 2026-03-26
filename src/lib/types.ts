@@ -2,47 +2,61 @@
 // Mochi 默契 - Type Definitions
 // ============================
 
-export type MBTIDimension = 'EI' | 'SN' | 'TF' | 'JP';
-export type MBTIStrength = 50 | 75 | 100;
-
-export interface MBTIProfile {
-  EI: { type: 'E' | 'I'; strength: MBTIStrength };
-  SN: { type: 'S' | 'N'; strength: MBTIStrength };
-  TF: { type: 'T' | 'F'; strength: MBTIStrength };
-  JP: { type: 'J' | 'P'; strength: MBTIStrength };
+// AI 對話分析產生的人格向量
+export interface AIPersonality {
+  bio: string;                  // AI 生成的自我介紹
+  // --- Personality Profile ---
+  traits: PersonalityTrait[];   // 人格特質標籤
+  values: string[];             // 核心價值觀 (e.g. '真誠', '自由', '成長')
+  // --- Dating Style ---
+  datingStyle?: string;          // 交往風格描述 (e.g. '慢熱穩定型', '熱情主動型')
+  // --- Communication ---
+  communicationStyle: string;   // 溝通風格描述
+  // --- Relationship ---
+  relationshipGoal: string;     // 關係期待描述
+  // --- Red Flags ---
+  redFlags?: string[];           // 用戶明確表達的地雷 (e.g. '不回訊息', '情緒勒索')
+  // --- Tags & Features ---
+  tags?: string[];               // 快速識別標籤 (e.g. '#慢熱', '#重視獨處', '#戶外派')
+  scoringFeatures?: ScoringFeatures; // 結構化評分特徵
+  // --- Internal ---
+  chatSummary: string;          // AI 對話摘要（內部用，不公開）
+  analyzedAt: string;           // ISO date
 }
 
-export interface ScenarioQuestion {
-  id: string;
-  question: string;
-  partnerQuestion: string;   // 對方視角的題目文字
-  options: string[];
-  category: string;
-  week: number; // 第幾週的題目
+export interface ScoringFeatures {
+  attachmentStyle: 'secure' | 'anxious' | 'avoidant' | 'mixed';  // 依附風格
+  socialEnergy: number;         // 社交能量 0-100 (0=極度內向, 100=極度外向)
+  conflictStyle: 'confronter' | 'avoider' | 'collaborator' | 'compromiser';  // 衝突處理
+  loveLanguage: string;         // 主要愛的語言
+  lifePace: 'slow' | 'moderate' | 'fast';  // 生活節奏
+  emotionalDepth: number;       // 情感深度 0-100
 }
 
-export interface ScenarioAnswer {
-  questionId: string;
-  myAnswer: number[];        // 複選：選項 index 陣列
-  partnerAnswer: number[];   // 複選：希望對方的選項 index 陣列
+export interface PersonalityTrait {
+  name: string;     // e.g. '好奇心強', '重視安全感'
+  score: number;    // 0-100 強度
+  category: 'social' | 'emotional' | 'lifestyle' | 'values';
 }
 
 export interface UserProfile {
   id: string;
+  dbId?: string;
   name: string;
   age: number;
+  hideAge?: boolean;
+  profileVisible?: boolean;
   gender: 'male' | 'female' | 'other';
   bio: string;
   photos: string[];
-  mbti: MBTIProfile;
-  mbtiCode: string; // e.g. "ENFP"
-  scenarioAnswers: ScenarioAnswer[];
+  aiPersonality?: AIPersonality;
   preferences: {
     ageMin: number;
     ageMax: number;
     genderPreference: ('male' | 'female' | 'other')[];
     region: string;
     preferredRegions?: string[];  // multi-select: cities user wants to match with
+    hiddenMatchIds?: string[];
   };
   onboardingComplete: boolean;
   createdAt: string;
@@ -56,6 +70,9 @@ export interface DailyCard {
   liked: boolean;
   skipped?: boolean;
   topicAnswer?: string;
+  recommendationReasons?: { reasons: string[]; caution: string | null } | null;
+  matchedSignals?: string[];
+  cautionSignals?: string[];
 }
 
 export interface ConversationTopic {
@@ -71,21 +88,37 @@ export interface Match {
   topicAnswers: Record<string, string>; // userId -> answer
   messages: ChatMessage[];
   createdAt: string;
-  status: 'active' | 'expired';
+  status: 'active' | 'expired' | 'removed';
+  otherUser?: UserProfile;
+  compatibility?: number;
 }
 
 export interface ChatMessage {
   id: string;
   senderId: string;
+  type: 'text' | 'image';
   text: string;
+  imageUrl?: string;
   timestamp: string;
+  readAt?: string | null;
 }
 
 export interface LikeAction {
+  id?: string;
   fromUserId: string;
   toUserId: string;
   topicAnswer: string;
   timestamp: string;
+}
+
+export interface AppNotification {
+  id: string;
+  type: 'match' | 'message' | 'like' | 'weekly' | 'system' | 'profile_view';
+  title: string;
+  body: string;
+  read: boolean;
+  timestamp: string;
+  link?: string;
 }
 
 // 台灣所有縣市（22 個）

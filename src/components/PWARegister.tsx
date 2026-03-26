@@ -13,9 +13,26 @@ export function PWARegister() {
   const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
-    // Register service worker
+    const isDev = process.env.NODE_ENV !== 'production';
+
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      if (isDev) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          registrations.forEach((registration) => {
+            void registration.unregister();
+          });
+        }).catch(() => {});
+
+        if ('caches' in window) {
+          caches.keys().then((keys) => {
+            keys.forEach((key) => {
+              void caches.delete(key);
+            });
+          }).catch(() => {});
+        }
+      } else {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      }
     }
 
     // Listen for install prompt
@@ -53,7 +70,7 @@ export function PWARegister() {
 
   return (
     <div className="fixed bottom-20 left-4 right-4 z-50 animate-slide-up">
-      <div className="glass-card p-4 rounded-2xl flex items-center gap-3" style={{ boxShadow: '0 8px 32px rgba(232, 132, 44, 0.2)' }}>
+      <div className="glass-card p-4 rounded-2xl flex items-center gap-3" style={{ boxShadow: '0 8px 32px rgba(255, 140, 107, 0.2)' }}>
         <div className="w-10 h-10 rounded-xl gradient-bg flex items-center justify-center shrink-0">
           <span className="text-white font-bold text-lg">默</span>
         </div>
@@ -64,7 +81,7 @@ export function PWARegister() {
         <button
           onClick={handleInstall}
           className="px-3 py-1.5 rounded-full text-xs font-bold text-white shrink-0"
-          style={{ background: 'linear-gradient(135deg, #E8842C, #F4A261)' }}
+          style={{ background: 'linear-gradient(135deg, #FF8C6B, #FFB088)' }}
         >
           安裝
         </button>

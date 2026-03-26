@@ -1,17 +1,21 @@
 'use client';
 
+import { supabase } from './supabase';
+
 export type EventName =
   | 'page_view'
   | 'login'
   | 'logout'
   | 'onboarding_start'
   | 'onboarding_complete'
+  | 'ai_chat_reset'
   | 'card_like'
   | 'card_skip'
-  | 'card_undo'
   | 'match_created'
   | 'chat_message_sent'
+  | 'chat_image_sent'
   | 'profile_updated'
+  | 'ai_chat_complete'
   | 'pwa_install_prompt'
   | 'pwa_installed'
   | 'apple_sign_in'
@@ -25,6 +29,22 @@ interface AnalyticsEvent {
 
 const STORAGE_KEY = 'mochi_analytics';
 const MAX_EVENTS = 500;
+
+async function uploadEvent(event: AnalyticsEvent) {
+  if (typeof window === 'undefined') return;
+
+  const { data: { session } } = await supabase.auth.getSession();
+  await fetch('/api/analytics', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {}),
+    },
+    body: JSON.stringify(event),
+  }).catch(() => undefined);
+}
 
 function getEvents(): AnalyticsEvent[] {
   if (typeof window === 'undefined') return [];
@@ -57,6 +77,7 @@ export function track(name: EventName, props?: Record<string, string | number | 
   const events = getEvents();
   events.push(event);
   saveEvents(events);
+  void uploadEvent(event);
 }
 
 export function getAnalyticsSummary() {
@@ -77,14 +98,14 @@ export function getAnalyticsSummary() {
       likes: count(today, 'card_like'),
       skips: count(today, 'card_skip'),
       matches: count(today, 'match_created'),
-      messages: count(today, 'chat_message_sent'),
+      messages: count(today, 'chat_message_sent') + count(today, 'chat_image_sent'),
     },
     week: {
       pageViews: count(week, 'page_view'),
       likes: count(week, 'card_like'),
       skips: count(week, 'card_skip'),
       matches: count(week, 'match_created'),
-      messages: count(week, 'chat_message_sent'),
+      messages: count(week, 'chat_message_sent') + count(week, 'chat_image_sent'),
     },
     firstEvent: events[0]?.ts,
     lastEvent: events[events.length - 1]?.ts,

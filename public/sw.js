@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mochi-v1';
+const CACHE_NAME = 'mochi-v2';
 const STATIC_ASSETS = [
   '/',
   '/home',

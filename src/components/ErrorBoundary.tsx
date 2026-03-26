@@ -32,7 +32,7 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-dvh flex flex-col items-center justify-center px-6 text-center">
+        <div className="min-h-dvh flex flex-col items-center justify-center px-6 text-center" style={{ background: '#FFF9F5' }}>
           <div
             className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6"
             style={{ background: 'linear-gradient(135deg, #EF4444, #F97316)', boxShadow: '0 8px 30px rgba(239, 68, 68, 0.25)' }}

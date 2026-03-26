@@ -1,20 +1,12 @@
-'use client';
-
-import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import BackButton from '@/components/BackButton';
+import { contactConfig } from '@/lib/contact';
 
 export default function TermsPage() {
-  const router = useRouter();
+  const { supportEmail } = contactConfig;
 
   return (
     <div className="min-h-dvh px-6 py-8 max-w-2xl mx-auto">
-      <button
-        onClick={() => router.back()}
-        className="flex items-center gap-2 text-text-secondary hover:text-text mb-6 transition-colors"
-      >
-        <ArrowLeft size={20} />
-        <span className="text-sm">返回</span>
-      </button>
+      <BackButton />
 
       <h1 className="text-2xl font-bold mb-6">
         <span className="gradient-text">服務條款</span>
@@ -25,7 +17,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-lg font-bold text-text mb-2">1. 服務說明</h2>
-          <p>Mochi 默契（以下簡稱「本服務」）是一款基於 MBTI 人格特質的社交配對平台，旨在幫助使用者透過性格分析找到契合的對象。</p>
+          <p>Mochi 默契（以下簡稱「本服務」）是一款基於個性分析的社交配對平台，旨在幫助使用者透過智慧配對找到契合的對象。</p>
         </section>
 
         <section>
@@ -58,7 +50,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-lg font-bold text-text mb-2">5. 配對機制</h2>
-          <p>本服務透過 MBTI 人格分析與情境題回答計算配對相容度。配對結果僅供參考，不保證配對成功或感情結果。</p>
+          <p>本服務透過個性分析計算配對相容度。配對結果僅供參考，不保證配對成功或感情結果。</p>
         </section>
 
         <section>
@@ -99,7 +91,7 @@ export default function TermsPage() {
         <section>
           <h2 className="text-lg font-bold text-text mb-2">11. 聯絡方式</h2>
           <p>如有任何問題，請聯繫：</p>
-          <p className="mt-1">📧 support@mochi-match.com</p>
+          <p className="mt-1">📧 {supportEmail || '目前請先透過 App 內支援與回報流程聯繫我們。'}</p>
         </section>
       </div>
 

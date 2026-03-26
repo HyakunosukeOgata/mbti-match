@@ -6,16 +6,17 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ConsentBanner } from "@/components/ConsentBanner";
 
 export const viewport: Viewport = {
-  themeColor: "#E8842C",
+  themeColor: "#FF8C6B",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
 };
 
 export const metadata: Metadata = {
-  title: "Mochi 默契 - 用MBTI性格找到對的人 | 免費MBTI配對交友",
-  description: "Mochi 默契 — 基於 MBTI 人格特質的智慧配對交友平台。透過16型人格測試與情境題，找到最適合你的另一半。台灣最有默契的性格交友 APP。",
-  keywords: ["Mochi", "默契", "MBTI配對", "MBTI交友", "性格配對", "人格測試", "16型人格", "INFP配對", "ENFJ交友", "台灣交友"],
+  metadataBase: new URL('https://mochi-match.com'),
+  title: "Mochi 默契 - 一起找到對的人",
+  description: "Mochi 默契 — 深度了解你的個性，找到最適合你的另一半。台灣最有默契的交友 APP。",
+  keywords: ["Mochi", "默契", "配對", "交友", "性格配對", "個性分析", "台灣交友", "交友APP"],
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -23,10 +24,20 @@ export const metadata: Metadata = {
     title: "Mochi 默契",
   },
   openGraph: {
-    title: "Mochi 默契 - 用性格找到對的人",
-    description: "Mochi 默契 — 透過MBTI人格特質智慧配對，找到最有默契的另一半",
+    title: "Mochi 默契 - 一起找到對的人",
+    description: "Mochi 默契 — 深度了解你的個性，找到最有默契的另一半",
     type: "website",
     locale: "zh_TW",
+    url: "https://mochi-match.com",
+    siteName: "Mochi 默契",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Mochi 默契 - 一起找到對的人",
+    description: "深度了解你的個性，找到最有默契的另一半",
+  },
+  alternates: {
+    canonical: "https://mochi-match.com",
   },
 };
 
@@ -36,7 +47,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-TW" suppressHydrationWarning>
+    <html lang="zh-TW" suppressHydrationWarning style={{ colorScheme: 'light' }}>
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-180.png" />
       </head>

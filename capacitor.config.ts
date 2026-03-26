@@ -15,12 +15,12 @@ const config: CapacitorConfig = {
     scheme: 'Mochi',
   },
   android: {
-    backgroundColor: '#FAF5FF',
+    backgroundColor: '#FFF9F5',
   },
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,
-      backgroundColor: '#FAF5FF',
+      backgroundColor: '#FFF9F5',
       showSpinner: false,
       launchAutoHide: true,
     },
@@ -29,8 +29,8 @@ const config: CapacitorConfig = {
       resizeOnFullScreen: true,
     },
     StatusBar: {
-      style: 'LIGHT',
-      backgroundColor: '#7C3AED',
+      style: 'DARK',
+      backgroundColor: '#FF8C6B',
     },
   },
 };

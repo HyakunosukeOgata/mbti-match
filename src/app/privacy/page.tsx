@@ -1,20 +1,12 @@
-'use client';
-
-import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import BackButton from '@/components/BackButton';
+import { contactConfig } from '@/lib/contact';
 
 export default function PrivacyPage() {
-  const router = useRouter();
+  const { privacyEmail } = contactConfig;
 
   return (
     <div className="min-h-dvh px-6 py-8 max-w-2xl mx-auto">
-      <button
-        onClick={() => router.back()}
-        className="flex items-center gap-2 text-text-secondary hover:text-text mb-6 transition-colors"
-      >
-        <ArrowLeft size={20} />
-        <span className="text-sm">返回</span>
-      </button>
+      <BackButton />
 
       <h1 className="text-2xl font-bold mb-6">
         <span className="gradient-text">隱私權政策</span>
@@ -27,7 +19,7 @@ export default function PrivacyPage() {
           <h2 className="text-lg font-bold text-text mb-2">1. 資料蒐集</h2>
           <p>Mochi 默契（以下簡稱「本服務」）在您使用本服務時，可能蒐集以下資訊：</p>
           <ul className="list-disc pl-5 space-y-1 mt-2">
-            <li>您提供的個人資料：暱稱、年齡、性別、自我介紹、照片、MBTI 人格類型</li>
+            <li>您提供的個人資料：暱稱、年齡、性別、自我介紹、照片、個性分析結果</li>
             <li>配對偏好：年齡範圍、性別偏好、地區</li>
             <li>使用行為：瀏覽、配對互動、聊天紀錄</li>
             <li>裝置資訊：瀏覽器類型、作業系統、裝置識別碼</li>
@@ -96,7 +88,7 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-lg font-bold text-text mb-2">9. 聯絡我們</h2>
           <p>如有任何隱私權相關問題，請聯繫：</p>
-          <p className="mt-1">📧 privacy@mochi-match.com</p>
+          <p className="mt-1">📧 {privacyEmail || '目前請先使用 App 內資料管理與刪除帳號流程提出請求。'}</p>
         </section>
       </div>
 

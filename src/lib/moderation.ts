@@ -10,7 +10,7 @@ const BLOCKED_PATTERNS: RegExp[] = [
   /約砲|約炮|一夜情|打炮|做愛|性交|裸照|裸體|色情|成人片/,
   /onlyfans|porn|nude|sex\s*chat|hook\s*up/i,
   // 詐騙/金錢
-  /匯款|轉帳給我|加line|加賴|加微信|私人帳號|投資.*報酬|穩賺/,
+  /匯款|轉帳給我|加line|加賴|加微信|私人帳號|投資.*報酬|穩賺|賴\s*[:：]?\s*\S+/,
   /bitcoin.*transfer|crypto.*invest|wire.*money/i,
   // 暴力/威脅
   /殺了你|弄死你|去死|找人.*揍你|要你好看/,
@@ -23,7 +23,7 @@ const BLOCKED_PATTERNS: RegExp[] = [
 // Spam patterns
 const SPAM_PATTERNS: RegExp[] = [
   /(.)\1{9,}/,             // Same char repeated 10+ times
-  /(https?:\/\/\S+){3,}/i, // 3+ URLs in one message
+  /(https?:\/\/\S+\s*){3,}/i, // 3+ URLs in one message
   /line\s*[:：]\s*\S+/i,    // Sharing Line ID
   /ig\s*[:：]\s*@/i,        // Sharing IG handle
 ];
@@ -31,6 +31,19 @@ const SPAM_PATTERNS: RegExp[] = [
 export interface ModerationResult {
   allowed: boolean;
   reason?: string;
+}
+
+/**
+ * Normalize text for moderation: strip invisible chars, punctuation separators, full-width → half-width
+ */
+function normalizeForCheck(text: string): string {
+  return text
+    // Strip zero-width and invisible characters
+    .replace(/[\u200B-\u200D\uFEFF\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u2000-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F]/g, '')
+    // Full-width → half-width (NFKC normalization)
+    .normalize('NFKC')
+    // Remove separators between characters (spaces, dots, dashes, underscores, punctuation)
+    .replace(/[\s\.\-_\*·。，！？,!?]+/g, '');
 }
 
 /**
@@ -47,14 +60,16 @@ export function moderateText(text: string): ModerationResult {
     return { allowed: false, reason: '訊息太長（上限 2000 字）' };
   }
 
+  const normalized = normalizeForCheck(trimmed);
+
   for (const pattern of BLOCKED_PATTERNS) {
-    if (pattern.test(trimmed)) {
+    if (pattern.test(trimmed) || pattern.test(normalized)) {
       return { allowed: false, reason: '訊息包含不當內容，請修改後重新發送' };
     }
   }
 
   for (const pattern of SPAM_PATTERNS) {
-    if (pattern.test(trimmed)) {
+    if (pattern.test(trimmed) || pattern.test(normalized)) {
       return { allowed: false, reason: '訊息疑似垃圾訊息，請修改後重新發送' };
     }
   }
@@ -86,8 +101,10 @@ export function moderateName(name: string): ModerationResult {
     return { allowed: false, reason: '名稱需要 1-20 個字' };
   }
 
+  const normalized = normalizeForCheck(trimmed);
+
   for (const pattern of BLOCKED_PATTERNS) {
-    if (pattern.test(trimmed)) {
+    if (pattern.test(trimmed) || pattern.test(normalized)) {
       return { allowed: false, reason: '名稱包含不當內容' };
     }
   }

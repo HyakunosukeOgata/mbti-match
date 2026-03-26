@@ -46,6 +46,18 @@ export default function PhotoGallery({ photos, name, mode = 'thumbnail', size = 
     touchDeltaX.current = 0;
   }, [prev, next]);
 
+  // Close lightbox on Escape key
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxOpen(false);
+      else if (e.key === 'ArrowLeft') prev();
+      else if (e.key === 'ArrowRight') next();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [lightboxOpen, prev, next]);
+
   if (!photos || photos.length === 0) return null;
 
   return (
@@ -53,7 +65,7 @@ export default function PhotoGallery({ photos, name, mode = 'thumbnail', size = 
       {mode === 'thumbnail' && (
         <div
           className={`${size} rounded-2xl overflow-hidden cursor-pointer relative group ${className}`}
-          style={{ boxShadow: '0 4px 12px rgba(232, 132, 44, 0.15)' }}
+          style={{ boxShadow: '0 4px 12px rgba(255, 140, 107, 0.12)' }}
           onClick={() => { setCurrentIndex(0); setLightboxOpen(true); }}
         >
           <img src={photos[0]} alt={name} className="w-full h-full object-cover" />
@@ -119,8 +131,8 @@ export default function PhotoGallery({ photos, name, mode = 'thumbnail', size = 
       {/* Lightbox rendered via portal to avoid layout issues */}
       {lightboxOpen && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 bg-black/90 flex items-center justify-center animate-fade-in"
-          style={{ zIndex: 200 }}
+          className="fixed inset-0 flex items-center justify-center animate-fade-in"
+          style={{ zIndex: 200, background: 'rgba(30, 25, 20, 0.92)' }}
           onClick={() => setLightboxOpen(false)}
           role="dialog"
           aria-modal="true"
@@ -152,14 +164,14 @@ export default function PhotoGallery({ photos, name, mode = 'thumbnail', size = 
               <>
                 <button
                   onClick={prev}
-                  className="absolute left-6 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/20 text-white flex items-center justify-center hover:bg-white/30 transition-colors focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
+                  className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/20 text-white flex items-center justify-center hover:bg-white/30 transition-colors focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
                   aria-label="上一張"
                 >
                   <ChevronLeft size={22} />
                 </button>
                 <button
                   onClick={next}
-                  className="absolute right-6 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/20 text-white flex items-center justify-center hover:bg-white/30 transition-colors focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
+                  className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/20 text-white flex items-center justify-center hover:bg-white/30 transition-colors focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2"
                   aria-label="下一張"
                 >
                   <ChevronRight size={22} />

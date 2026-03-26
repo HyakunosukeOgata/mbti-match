@@ -1,15 +1,17 @@
 'use client';
 
 import { useApp } from '@/lib/store';
+import { getMessagePreview } from '@/lib/chat-message';
+import { getCompatibilityInsight } from '@/lib/matching';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { mockUsers } from '@/lib/mock-data';
 import BottomNav from '@/components/BottomNav';
 import PhotoGallery from '@/components/PhotoGallery';
-import { MessageCircle, Clock, Heart, Sparkles, Flame } from 'lucide-react';
+import { MessageCircle, Sparkles, Flame } from 'lucide-react';
 import Link from 'next/link';
 import { track } from '@/lib/analytics';
-import { calculateCompatibility } from '@/lib/matching';
+
+const MATCH_EXPIRY_HOURS = 72;
 
 function formatRelativeTime(date: Date): string {
   const now = new Date();
@@ -24,21 +26,55 @@ function formatRelativeTime(date: Date): string {
   return date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
 }
 
+function getExpiryInfo(createdAt: string, hasMessages: boolean): { expired: boolean; urgentText: string | null; hoursLeft: number; progress: number } {
+  if (hasMessages) return { expired: false, urgentText: null, hoursLeft: Infinity, progress: 1 };
+  const diff = Date.now() - new Date(createdAt).getTime();
+  const hoursElapsed = diff / (1000 * 60 * 60);
+  const hoursLeft = MATCH_EXPIRY_HOURS - hoursElapsed;
+  const progress = Math.max(0, Math.min(1, hoursLeft / MATCH_EXPIRY_HOURS));
+  if (hoursLeft <= 0) return { expired: true, urgentText: '已過期', hoursLeft: 0, progress: 0 };
+  if (hoursLeft <= 12) return { expired: false, urgentText: `剩 ${Math.ceil(hoursLeft)} 小時`, hoursLeft, progress };
+  if (hoursLeft <= 24) return { expired: false, urgentText: `剩不到 1 天`, hoursLeft, progress };
+  return { expired: false, urgentText: null, hoursLeft, progress };
+}
+
+function ExpiryRing({ progress, size = 28 }: { progress: number; size?: number }) {
+  const r = (size - 4) / 2;
+  const circ = 2 * Math.PI * r;
+  const offset = circ * (1 - progress);
+  const color = progress > 0.5 ? '#52C485' : progress > 0.2 ? '#F5A623' : '#FF5A5A';
+  return (
+    <svg width={size} height={size} className="shrink-0 -rotate-90">
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth={2.5} />
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={2.5}
+        strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+        style={{ transition: 'stroke-dashoffset 0.5s ease' }} />
+    </svg>
+  );
+}
+
 export default function MatchesPage() {
-  const { currentUser, matches } = useApp();
+  const { currentUser, authReady, matches } = useApp();
   const router = useRouter();
 
   useEffect(() => {
+    if (!authReady) return;
     if (!currentUser) {
       router.replace('/');
+    } else if (!currentUser.onboardingComplete) {
+      router.replace('/onboarding/ai-chat');
     } else {
       track('page_view', { page: 'matches' });
     }
-  }, [currentUser, router]);
+  }, [authReady, currentUser, router]);
 
-  if (!currentUser) return null;
+  if (!authReady || !currentUser) return null;
 
-  const activeMatches = matches.filter(m => m.status === 'active');
+  const activeMatches = matches.filter(m => {
+    if (m.status !== 'active') return false;
+    const expiry = getExpiryInfo(m.createdAt, m.messages.length > 0);
+    return !expiry.expired;
+  });
 
   return (
     <div className="min-h-dvh pb-24">
@@ -59,8 +95,8 @@ export default function MatchesPage() {
         {activeMatches.length === 0 && (
           <div className="text-center py-24 animate-fade-in">
             <div className="relative w-28 h-28 mx-auto mb-6">
-              <div className="absolute inset-0 rounded-full animate-pulse-ring" style={{ background: 'rgba(232, 132, 44, 0.06)' }} />
-              <div className="w-28 h-28 rounded-full flex items-center justify-center animate-float" style={{ background: 'linear-gradient(135deg, rgba(232, 132, 44, 0.1), rgba(255, 107, 107, 0.08))' }}>
+              <div className="absolute inset-0 rounded-full animate-pulse-ring" style={{ background: 'rgba(255, 140, 107, 0.06)' }} />
+              <div className="w-28 h-28 rounded-full flex items-center justify-center animate-float" style={{ background: 'linear-gradient(135deg, rgba(255, 140, 107, 0.1), rgba(255, 107, 107, 0.08))' }}>
                 <MessageCircle size={44} className="text-primary" strokeWidth={1.5} />
               </div>
             </div>
@@ -76,45 +112,48 @@ export default function MatchesPage() {
         )}
 
         {activeMatches.map((match, idx) => {
-          const otherId = match.users.find(id => id !== currentUser.id);
-          const otherUser = mockUsers.find(u => u.id === otherId);
+          const otherUser = match.otherUser;
           if (!otherUser) return null;
 
           const lastMsg = match.messages[match.messages.length - 1];
-          const hasUserMessages = match.messages.some(m => m.senderId === currentUser.id);
-          const unread = !hasUserMessages
-            ? lastMsg?.senderId === 'system' // new match, not yet chatted
-            : lastMsg?.senderId !== currentUser.id && lastMsg?.senderId !== 'system';
-          const compat = calculateCompatibility(currentUser, otherUser);
+          const unread = match.messages.some((message) => message.senderId !== currentUser.id && !message.readAt);
+          const compat = match.compatibility || 0;
+          const expiry = getExpiryInfo(match.createdAt, match.messages.length > 0);
+          const insight = getCompatibilityInsight(currentUser, otherUser);
 
           return (
             <Link
               key={match.id}
               href={`/chat/${match.id}`}
-              className={`match-card flex items-center gap-4 no-underline text-text block animate-slide-up${unread ? ' match-card-unread' : ''}`}
-              style={{ animationDelay: `${idx * 0.08}s`, '--compat-opacity': Math.min(compat / 100, 0.6) } as React.CSSProperties}
+              className={`card match-card flex items-center gap-4 no-underline text-text block animate-slide-up${unread ? ' match-card-unread' : ''}`}
+              style={{ animationDelay: `${idx * 0.08}s`, '--compat-opacity': 0 } as React.CSSProperties}
             >
               <div className="relative">
                 <PhotoGallery photos={otherUser.photos} name={otherUser.name} mode="thumbnail" size="w-14 h-14" />
-                {/* Online indicator */}
-                <div className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white bg-emerald-400" />
                 {unread && (
-                  <div className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full animate-pulse-ring" style={{ background: 'linear-gradient(135deg, #E8842C, #FF6B6B)' }} />
+                  <div className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full animate-pulse-ring" style={{ background: 'linear-gradient(135deg, #FF8C6B, #FF6B8A)' }} />
                 )}
               </div>
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-semibold">{otherUser.name}</span>
-                  <span className="mbti-badge !text-[11px] !py-0.5 !px-2">{otherUser.mbtiCode}</span>
+                  {otherUser.aiPersonality?.values[0] && (
+                    <span className="personality-badge !text-[10px] !py-0.5 !px-2">{otherUser.aiPersonality.values[0]}</span>
+                  )}
                 </div>
                 <p className={`text-sm truncate ${unread ? 'text-text font-medium' : 'text-text-secondary'}`}>
-                  {lastMsg?.senderId === 'system'
+                  {!lastMsg
                     ? '🎉 配對成功！開始聊天吧'
                     : lastMsg?.senderId === currentUser.id
-                    ? `你: ${lastMsg.text}`
-                    : lastMsg?.text || '開始聊天'}
+                    ? `你: ${getMessagePreview(lastMsg, true)}`
+                    : getMessagePreview(lastMsg) || '開始聊天'}
                 </p>
+                {!lastMsg && (
+                  <p className="text-[11px] text-text-secondary truncate mt-1">
+                    破冰提示：{insight.starters[0]}
+                  </p>
+                )}
               </div>
 
               <div className="text-right flex flex-col items-end gap-1.5 shrink-0">
@@ -127,6 +166,17 @@ export default function MatchesPage() {
                     ? formatRelativeTime(new Date(lastMsg.timestamp))
                     : ''}
                 </div>
+                {expiry.urgentText && (
+                  <div className="flex items-center gap-1">
+                    <ExpiryRing progress={expiry.progress} size={22} />
+                    <span className="text-[10px] font-semibold" style={{ color: expiry.progress > 0.2 ? 'var(--warning)' : 'var(--danger)' }}>
+                      {expiry.urgentText}
+                    </span>
+                  </div>
+                )}
+                {!expiry.urgentText && !lastMsg && expiry.progress < 1 && (
+                  <ExpiryRing progress={expiry.progress} size={22} />
+                )}
               </div>
             </Link>
           );

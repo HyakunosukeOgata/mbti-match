@@ -1,39 +1,41 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
-import { UserProfile, Match, DailyCard, LikeAction, ConversationTopic, ChatMessage } from './types';
-import { mockUsers, conversationTopics } from './mock-data';
-import { calculateCompatibility, getDailyMatches, getSharedAnswers } from './matching';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { Session } from '@supabase/supabase-js';
+import { DailyCard, LikeAction, Match, UserProfile } from './types';
 import { track, clearAnalytics } from './analytics';
+import { uploadChatImage } from './chat-media';
+import { supabase } from './supabase';
+import { signOut as authSignOut } from './auth';
+import { USER_SCOPED_STORAGE_KEYS, removeLegacyStorage, removeScopedStorage } from './client-storage';
+import { loadProfilePhotos, syncProfilePhotos } from './profile-photos';
+import { loadProfilesByDbIds, mapDbUserToProfile, mapLikeRow, mapMatchRow, type DbLikeRow, type DbMatchRow, type DbMessageRow, type DbUserRow } from './social';
 
-let msgCounter = 0;
-
-// ============================
-// Context Types
-// ============================
 interface AuthState {
   currentUser: UserProfile | null;
   setCurrentUser: (user: UserProfile | null) => void;
   isLoggedIn: boolean;
   isHydrated: boolean;
+  authReady: boolean;
+  session: Session | null;
   login: (name: string) => void;
-  logout: () => void;
-  updateProfile: (updates: Partial<UserProfile>) => void;
+  logout: () => Promise<void>;
+  deleteAccount: () => Promise<boolean>;
+  updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
 }
 
 interface CardsState {
   dailyCards: DailyCard[];
-  refreshDailyCards: () => void;
-  likeUser: (userId: string, topicAnswer: string) => boolean;
-  skipUser: (userId: string) => void;
-  undoSkip: (userId: string) => void;
+  refreshDailyCards: () => Promise<void>;
+  likeUser: (userId: string, topicAnswer: string) => Promise<string | null>;
+  skipUser: (userId: string) => Promise<void>;
   likes: LikeAction[];
 }
 
 interface MatchesState {
   matches: Match[];
-  sendMessage: (matchId: string, text: string) => void;
-  removeMatch: (matchId: string) => void;
+  sendMessage: (matchId: string, payload: { text?: string; imageDataUrl?: string }) => Promise<void>;
+  removeMatch: (matchId: string) => Promise<void>;
 }
 
 interface OnboardingState {
@@ -41,17 +43,11 @@ interface OnboardingState {
   setOnboardingStep: (step: number) => void;
 }
 
-// ============================
-// 4 Separate Contexts
-// ============================
 const AuthContext = createContext<AuthState | null>(null);
 const CardsContext = createContext<CardsState | null>(null);
 const MatchesContext = createContext<MatchesState | null>(null);
 const OnboardingContext = createContext<OnboardingState | null>(null);
 
-// ============================
-// Individual hooks (recommended — only re-render on relevant changes)
-// ============================
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be within AppProvider');
@@ -76,7 +72,6 @@ export function useOnboarding() {
   return ctx;
 }
 
-// Backward-compatible combined hook
 export function useApp() {
   const auth = useAuth();
   const cards = useCards();
@@ -85,17 +80,20 @@ export function useApp() {
   return { ...auth, ...cards, ...matches, ...onboarding };
 }
 
-// ============================
-// Helpers
-// ============================
-function getRandomTopics(count: number): ConversationTopic[] {
-  const shuffled = [...conversationTopics].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
+async function authorizedJsonFetch<T>(path: string, accessToken: string, init?: RequestInit): Promise<T | null> {
+  const response = await fetch(path, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      ...(init?.headers || {}),
+    },
+  });
+
+  if (!response.ok) return null;
+  return response.json() as Promise<T>;
 }
 
-// ============================
-// AppProvider (4 nested context providers)
-// ============================
 export function AppProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [dailyCards, setDailyCards] = useState<DailyCard[]>([]);
@@ -103,358 +101,550 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [likes, setLikes] = useState<LikeAction[]>([]);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [isHydrated, setIsHydrated] = useState(false);
-  const matchesRef = React.useRef(matches);
-  matchesRef.current = matches;
-  const dailyCardsRef = React.useRef(dailyCards);
-  dailyCardsRef.current = dailyCards;
+  const [session, setSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+
   const currentUserRef = React.useRef(currentUser);
   currentUserRef.current = currentUser;
-  const likesRef = React.useRef(likes);
-  likesRef.current = likes;
+  const dailyCardsRef = React.useRef(dailyCards);
+  dailyCardsRef.current = dailyCards;
+  const matchesRef = React.useRef(matches);
+  matchesRef.current = matches;
+  const sessionRef = React.useRef(session);
+  sessionRef.current = session;
 
-  // 載入 localStorage
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('mbti-match-user');
-      if (saved) {
-        const user = JSON.parse(saved);
-        setCurrentUser(user);
-        if (user.onboardingComplete) {
-          setOnboardingStep(4);
-        }
-      }
-      const savedMatches = localStorage.getItem('mbti-match-matches');
-      if (savedMatches) setMatches(JSON.parse(savedMatches));
-      const savedLikes = localStorage.getItem('mbti-match-likes');
-      if (savedLikes) setLikes(JSON.parse(savedLikes));
-      const savedCards = localStorage.getItem('mbti-match-daily');
-      if (savedCards) {
-        const parsed = JSON.parse(savedCards);
-        if (parsed.date === new Date().toDateString()) {
-          setDailyCards(parsed.cards);
-        }
-      }
-    } catch {
-      localStorage.removeItem('mbti-match-user');
-      localStorage.removeItem('mbti-match-matches');
-      localStorage.removeItem('mbti-match-likes');
-      localStorage.removeItem('mbti-match-daily');
+  const isDemoBotUser = useCallback((user?: UserProfile) => {
+    return !!user?.dbId && user.id === user.dbId;
+  }, []);
+
+  const buildDemoReply = useCallback((senderName: string, text: string) => {
+    if (text.includes('你好') || text.includes('嗨')) {
+      return `嗨 ${senderName}，很高興認識你。`;
     }
-    setIsHydrated(true);
+
+    const replies = [
+      '這個開場很自然，我也想多聽一點你的故事。',
+      '我對這個話題也很有感，感覺我們可以慢慢聊開。',
+      '哈哈，這句有打到我，想知道你為什麼會這樣想。',
+      '有默契耶，我通常也會從這種生活小事開始聊天。',
+    ];
+
+    return replies[text.length % replies.length];
   }, []);
 
-  // 儲存到 localStorage
-  useEffect(() => {
-    if (!isHydrated) return;
-    try {
-      if (currentUser) localStorage.setItem('mbti-match-user', JSON.stringify(currentUser));
-    } catch { /* localStorage 已滿或不可用 */ }
-  }, [currentUser, isHydrated]);
-  useEffect(() => {
-    if (!isHydrated) return;
-    try {
-      localStorage.setItem('mbti-match-matches', JSON.stringify(matches));
-    } catch { /* localStorage 已滿或不可用 */ }
-  }, [matches, isHydrated]);
-  useEffect(() => {
-    if (!isHydrated) return;
-    try {
-      localStorage.setItem('mbti-match-likes', JSON.stringify(likes));
-    } catch { /* localStorage 已滿或不可用 */ }
-  }, [likes, isHydrated]);
-
-  // ============================
-  // Auth actions
-  // ============================
-  const login = useCallback((name: string) => {
-    const newUser: UserProfile = {
-      id: 'me-' + Date.now(),
-      name,
-      age: 25,
-      gender: 'male',
-      bio: '',
-      photos: [],
-      mbti: {
-        EI: { type: 'E', strength: 50 },
-        SN: { type: 'S', strength: 50 },
-        TF: { type: 'T', strength: 50 },
-        JP: { type: 'J', strength: 50 },
-      },
-      mbtiCode: 'ESTJ',
-      scenarioAnswers: [],
-      preferences: {
-        ageMin: 20,
-        ageMax: 35,
-        genderPreference: ['female', 'male', 'other'],
-        region: '台北市',
-      },
-      onboardingComplete: false,
-      createdAt: new Date().toISOString(),
-    };
-    setCurrentUser(newUser);
-    setOnboardingStep(1);
-    track('login');
-  }, []);
-
-  const logout = useCallback(() => {
-    track('logout');
-    clearAnalytics();
+  const clearRuntimeState = useCallback(() => {
     setCurrentUser(null);
     setDailyCards([]);
     setMatches([]);
     setLikes([]);
     setOnboardingStep(0);
-    localStorage.removeItem('mbti-match-user');
-    localStorage.removeItem('mbti-match-daily');
-    localStorage.removeItem('mbti-match-matches');
-    localStorage.removeItem('mbti-match-likes');
-    localStorage.removeItem('mbti-match-skipped');
-    localStorage.removeItem('mochi_analytics_consent');
-    localStorage.removeItem('mochi_blocked_users');
-    localStorage.removeItem('mochi_blocked_names');
-    localStorage.removeItem('mochi_reports');
-    localStorage.removeItem('mochi_profile_visible');
-    localStorage.removeItem('mochi_hide_age');
+  }, []);
+
+  const clearPersistedUserState = useCallback((userId?: string | null) => {
+    removeScopedStorage(USER_SCOPED_STORAGE_KEYS, userId);
+    removeLegacyStorage([
+      ...USER_SCOPED_STORAGE_KEYS,
+      'mbti-match-user',
+      'mochi_analytics',
+      'mochi_analytics_consent',
+    ]);
     if ('caches' in window) {
+      caches.delete('mochi-v2').catch(() => {});
       caches.delete('mochi-v1').catch(() => {});
     }
   }, []);
 
-  const updateProfile = useCallback((updates: Partial<UserProfile>) => {
-    setCurrentUser(prev => {
-      if (!prev) return prev;
-      track('profile_updated');
-      const updated = { ...prev, ...updates };
-      if (updates.preferences) {
-        updated.preferences = { ...prev.preferences, ...updates.preferences };
+  const loadUserProfile = useCallback(async (supabaseUserId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('auth_id', supabaseUserId)
+        .maybeSingle<DbUserRow>();
+
+      if (error) {
+        setCurrentUser(null);
+        setOnboardingStep(0);
+        return;
       }
-      if (updates.mbti) {
-        updated.mbtiCode =
-          updates.mbti.EI.type + updates.mbti.SN.type + updates.mbti.TF.type + updates.mbti.JP.type;
-      }
-      return updated;
-    });
-  }, []);
 
-  // ============================
-  // Cards actions
-  // ============================
-  const saveDailyCards = useCallback((cards: DailyCard[]) => {
-    try {
-      localStorage.setItem(
-        'mbti-match-daily',
-        JSON.stringify({ date: new Date().toDateString(), cards })
-      );
-    } catch { /* localStorage 已滿或不可用 */ }
-  }, []);
-
-  const refreshDailyCards = useCallback(() => {
-    const user = currentUserRef.current;
-    if (!user) return;
-    const likedIds = likesRef.current.map(l => l.toUserId);
-    const matchedIds = matchesRef.current.flatMap(m => m.users).filter(id => id !== user.id);
-    // Also exclude blocked users
-    let blockedIds: string[] = [];
-    try {
-      const raw = localStorage.getItem('mochi_blocked_users');
-      if (raw) blockedIds = JSON.parse(raw);
-    } catch { /* ignore */ }
-    // Also exclude previously skipped users (from any session)
-    let skippedIds: string[] = [];
-    try {
-      const raw = localStorage.getItem('mbti-match-skipped');
-      if (raw) skippedIds = JSON.parse(raw);
-    } catch { /* ignore */ }
-    const excludeIds = [...new Set([...likedIds, ...matchedIds, ...blockedIds, ...skippedIds])];
-    const topMatches = getDailyMatches(user, mockUsers, excludeIds);
-    const topics = getRandomTopics(5);
-    const now = new Date();
-    const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
-
-    const cards: DailyCard[] = topMatches.map((u, i) => ({
-      user: u,
-      compatibility: calculateCompatibility(user, u),
-      topic: topics[i] || topics[0],
-      expiresAt: expires,
-      liked: false,
-    }));
-
-    setDailyCards(cards);
-    localStorage.setItem(
-      'mbti-match-daily',
-      JSON.stringify({ date: now.toDateString(), cards })
-    );
-  }, []);
-
-  const likeUser = useCallback((userId: string, topicAnswer: string): boolean => {
-    const user = currentUserRef.current;
-    if (!user) return false;
-    if (dailyCardsRef.current.find(c => c.user.id === userId)?.liked) return false;
-
-    const newLike: LikeAction = {
-      fromUserId: user.id,
-      toUserId: userId,
-      topicAnswer,
-      timestamp: new Date().toISOString(),
-    };
-    setLikes(prev => [...prev, newLike]);
-    track('card_like', { targetUserId: userId });
-
-    setDailyCards(prev => {
-      const updated = prev.map(c => (c.user.id === userId ? { ...c, liked: true, topicAnswer } : c));
-      saveDailyCards(updated);
-      return updated;
-    });
-
-    // 基於兼容度決定配對機率：80%+ → 90% 配對，60-79% → 50%，<60% → 15%
-    const compat = calculateCompatibility(user, mockUsers.find(u => u.id === userId) || user);
-    const matchChance = compat >= 80 ? 0.9 : compat >= 60 ? 0.5 : 0.15;
-    const isMutual = Math.random() < matchChance;
-    if (isMutual) {
-      const card = dailyCardsRef.current.find(c => c.user.id === userId);
-      const otherUser = mockUsers.find(u => u.id === userId);
-      const shared = otherUser ? getSharedAnswers(user, otherUser) : [];
-      const icebreaker = shared.length > 0
-        ? `\n\n✨ 你們在「${shared[0].category}」都選了「${shared[0].sharedOptions[0]}」，聊聊看？`
-        : '';
-      const newMatch: Match = {
-        id: 'match-' + Date.now(),
-        users: [user.id, userId],
-        topic: card?.topic || conversationTopics[0],
-        topicAnswers: {
-          [user.id]: topicAnswer,
-          [userId]: '對方的回答（demo）',
-        },
-        messages: [
-          {
-            id: 'sys-1',
-            senderId: 'system',
-            text: `🎉 配對成功！你們對彼此都感興趣，開始聊天吧！${icebreaker}`,
-            timestamp: new Date().toISOString(),
+      if (!data) {
+        setCurrentUser({
+          id: supabaseUserId,
+          dbId: undefined,
+          name: '',
+          age: 25,
+          gender: 'other',
+          bio: '',
+          photos: [],
+          aiPersonality: undefined,
+          preferences: {
+            ageMin: 20,
+            ageMax: 35,
+            genderPreference: ['female', 'male', 'other'],
+            region: '台北市',
           },
-        ],
-        createdAt: new Date().toISOString(),
-        status: 'active',
-      };
-      setMatches(prev => [...prev, newMatch]);
-      track('match_created', { matchedUserId: userId });
-    }
-    return isMutual;
-  }, [saveDailyCards]);
-
-  const skipUser = useCallback((userId: string) => {
-    track('card_skip', { targetUserId: userId });
-    // Persist skipped user so they don't reappear
-    try {
-      const raw = localStorage.getItem('mbti-match-skipped');
-      const skipped: string[] = raw ? JSON.parse(raw) : [];
-      if (!skipped.includes(userId)) {
-        skipped.push(userId);
-        localStorage.setItem('mbti-match-skipped', JSON.stringify(skipped));
+          onboardingComplete: false,
+          createdAt: new Date().toISOString(),
+        });
+        setOnboardingStep(1);
+        return;
       }
-    } catch { /* ignore */ }
-    setDailyCards(prev => {
-      const updated = prev.map(c => (c.user.id === userId ? { ...c, skipped: true } : c));
-      saveDailyCards(updated);
-      return updated;
-    });
-  }, [saveDailyCards]);
 
-  const undoSkip = useCallback((userId: string) => {
-    track('card_undo', { targetUserId: userId });
-    // Remove from persisted skipped list
-    try {
-      const raw = localStorage.getItem('mbti-match-skipped');
-      const skipped: string[] = raw ? JSON.parse(raw) : [];
-      const updated = skipped.filter(id => id !== userId);
-      localStorage.setItem('mbti-match-skipped', JSON.stringify(updated));
-    } catch { /* ignore */ }
-    setDailyCards(prev => {
-      const updated = prev.map(c => (c.user.id === userId ? { ...c, skipped: false } : c));
-      saveDailyCards(updated);
-      return updated;
-    });
-  }, [saveDailyCards]);
+      const photos = await loadProfilePhotos(data.id);
+      const user = mapDbUserToProfile(data, photos);
+      setCurrentUser(user);
+      setOnboardingStep(user.onboardingComplete ? 4 : 1);
+    } catch {
+      setCurrentUser(null);
+      setOnboardingStep(0);
+    }
+  }, []);
 
-  // ============================
-  // Matches actions
-  // ============================
-  const sendMessage = useCallback((matchId: string, text: string) => {
-    const user = currentUserRef.current;
-    if (!user) return;
-    track('chat_message_sent');
-    const msg: ChatMessage = {
-      id: `msg-${Date.now()}-${msgCounter++}`,
-      senderId: user.id,
-      text,
-      timestamp: new Date().toISOString(),
+  const loadLikes = useCallback(async (userDbId: string, currentUserAuthId: string) => {
+    const { data: likeRows, error } = await supabase
+      .from('likes')
+      .select('*')
+      .eq('from_user_id', userDbId)
+      .order('created_at', { ascending: false });
+
+    if (error || !likeRows) {
+      setLikes([]);
+      return;
+    }
+
+    const relatedIds = [...new Set((likeRows as DbLikeRow[]).flatMap((row) => [row.from_user_id, row.to_user_id]))];
+    const profilesByDbId = await loadProfilesByDbIds(supabase, relatedIds);
+    const mapped = (likeRows as DbLikeRow[])
+      .map((row) => mapLikeRow(row, currentUserAuthId, profilesByDbId))
+      .filter((row): row is NonNullable<typeof row> => !!row);
+    setLikes(mapped);
+  }, []);
+
+  const loadMatches = useCallback(async () => {
+    const activeUser = currentUserRef.current;
+    if (!activeUser?.dbId) {
+      setMatches([]);
+      return;
+    }
+
+    const { data: matchRows, error: matchError } = await supabase
+      .from('matches')
+      .select('*')
+      .or(`user1_id.eq.${activeUser.dbId},user2_id.eq.${activeUser.dbId}`)
+      .neq('status', 'removed')
+      .order('created_at', { ascending: false });
+
+    if (matchError || !matchRows) {
+      setMatches([]);
+      return;
+    }
+
+    if (matchRows.length === 0) {
+      setMatches([]);
+      return;
+    }
+
+    const hiddenMatchIds = new Set(activeUser.preferences.hiddenMatchIds || []);
+
+    const visibleMatchRows = (matchRows as DbMatchRow[]).filter((row) => !hiddenMatchIds.has(row.id));
+    if (visibleMatchRows.length === 0) {
+      setMatches([]);
+      return;
+    }
+
+    const matchIds = visibleMatchRows.map((row) => row.id);
+    const participantIds = [...new Set(visibleMatchRows.flatMap((row) => [row.user1_id, row.user2_id]))];
+    const [{ data: messageRows, error: messageError }, profilesByDbId] = await Promise.all([
+      supabase.from('messages').select('*').in('match_id', matchIds).order('created_at', { ascending: true }),
+      loadProfilesByDbIds(supabase, participantIds),
+    ]);
+
+    if (messageError) {
+      setMatches([]);
+      return;
+    }
+
+    const messagesByMatchId = new Map<string, DbMessageRow[]>();
+    for (const message of (messageRows || []) as DbMessageRow[]) {
+      const bucket = messagesByMatchId.get(message.match_id) || [];
+      bucket.push(message);
+      messagesByMatchId.set(message.match_id, bucket);
+    }
+
+    const mapped = visibleMatchRows
+      .map((row) => mapMatchRow(row, activeUser.dbId!, activeUser.id, profilesByDbId, messagesByMatchId.get(row.id) || []))
+      .filter((row): row is NonNullable<typeof row> => !!row);
+    setMatches(mapped);
+  }, []);
+
+  const refreshDailyCards = useCallback(async () => {
+    const accessToken = sessionRef.current?.access_token;
+    if (!accessToken) {
+      setDailyCards([]);
+      return;
+    }
+
+    const result = await authorizedJsonFetch<{ cards: DailyCard[] }>('/api/social/cards', accessToken);
+    setDailyCards(result?.cards || []);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    removeLegacyStorage(USER_SCOPED_STORAGE_KEYS);
+
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      if (!mounted) return;
+      setSession(initialSession);
+      if (initialSession?.user) {
+        void loadUserProfile(initialSession.user.id).finally(() => {
+          if (mounted) setAuthReady(true);
+        });
+      } else {
+        clearRuntimeState();
+        setIsHydrated(true);
+        setAuthReady(true);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      if (nextSession?.user) {
+        void loadUserProfile(nextSession.user.id).finally(() => setAuthReady(true));
+      } else {
+        clearRuntimeState();
+        setIsHydrated(true);
+        setAuthReady(true);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
     };
-    setMatches(prev =>
-      prev.map(m =>
-        m.id === matchId ? { ...m, messages: [...m.messages, msg] } : m
-      )
-    );
+  }, [clearRuntimeState, loadUserProfile]);
 
-    // Demo: auto-reply (with cleanup to prevent leaks)
-    const replyTimer = setTimeout(() => {
-      const currentMatch = matchesRef.current.find(m => m.id === matchId);
-      if (!currentMatch) return; // match was deleted, skip
-      const otherUserId = currentMatch.users.find(id => id !== user.id);
-      if (!otherUserId) return;
-      const autoReplies = [
-        '哈哈，我也這麼覺得！',
-        '真的嗎？好有趣 😄',
-        '我也喜歡這個！我們品味很像呢',
-        '下次可以一起去試試看！',
-        '你的想法好特別～',
-        '對啊，我最近也在想這件事',
-      ];
-      const reply: ChatMessage = {
-        id: `reply-${Date.now()}-${msgCounter++}`,
-        senderId: otherUserId,
-        text: autoReplies[Math.floor(Math.random() * autoReplies.length)],
-        timestamp: new Date().toISOString(),
-      };
-      setMatches(prev =>
-        prev.map(m =>
-          m.id === matchId ? { ...m, messages: [...m.messages, reply] } : m
-        )
-      );
-    }, 1500 + Math.random() * 2000); // 隨機 1.5-3.5 秒
-    void replyTimer; // suppress unused warning
+  useEffect(() => {
+    if (!authReady) return;
+    if (!currentUser?.dbId) {
+      setMatches([]);
+      setLikes([]);
+      setDailyCards([]);
+      setIsHydrated(true);
+      return;
+    }
+
+    let cancelled = false;
+    setIsHydrated(false);
+
+    Promise.all([
+      loadLikes(currentUser.dbId, currentUser.id),
+      loadMatches(),
+    ]).finally(() => {
+      if (!cancelled) setIsHydrated(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, currentUser?.dbId, currentUser?.id, loadLikes, loadMatches]);
+
+  useEffect(() => {
+    if (!authReady || !currentUser?.dbId) return;
+
+    const refreshSocial = () => {
+      void loadMatches();
+      void loadLikes(currentUser.dbId!, currentUser.id);
+    };
+
+    const channelA = supabase
+      .channel(`matches-user1-${currentUser.dbId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `user1_id=eq.${currentUser.dbId}` }, refreshSocial)
+      .subscribe();
+
+    const channelB = supabase
+      .channel(`matches-user2-${currentUser.dbId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `user2_id=eq.${currentUser.dbId}` }, refreshSocial)
+      .subscribe();
+
+    const channelC = supabase
+      .channel(`likes-${currentUser.dbId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'likes' }, refreshSocial)
+      .subscribe();
+
+    const channelD = supabase
+      .channel(`messages-${currentUser.dbId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => { void loadMatches(); })
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channelA);
+      void supabase.removeChannel(channelB);
+      void supabase.removeChannel(channelC);
+      void supabase.removeChannel(channelD);
+    };
+  }, [authReady, currentUser?.dbId, currentUser?.id, loadLikes, loadMatches]);
+
+  const login = useCallback((_name: string) => {
+    track('login');
   }, []);
 
-  const removeMatch = useCallback((matchId: string) => {
-    setMatches(prev => prev.filter(m => m.id !== matchId));
+  const logout = useCallback(async () => {
+    const activeUserId = sessionRef.current?.user.id ?? currentUserRef.current?.id;
+    track('logout');
+    clearAnalytics();
+    clearRuntimeState();
+    clearPersistedUserState(activeUserId);
+    setSession(null);
+    if (sessionRef.current) {
+      await authSignOut();
+    }
+  }, [clearPersistedUserState, clearRuntimeState]);
+
+  const deleteAccount = useCallback(async (): Promise<boolean> => {
+    const activeSession = sessionRef.current;
+    const activeUserId = activeSession?.user.id ?? currentUserRef.current?.id;
+    if (!activeSession?.access_token) return false;
+
+    try {
+      const res = await fetch('/api/delete-account', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${activeSession.access_token}` },
+      });
+      if (!res.ok) return false;
+      clearRuntimeState();
+      clearPersistedUserState(activeUserId);
+      setSession(null);
+      await authSignOut();
+      return true;
+    } catch {
+      return false;
+    }
+  }, [clearPersistedUserState, clearRuntimeState]);
+
+  const updateProfile = useCallback(async (updates: Partial<UserProfile>) => {
+    const previousUser = currentUserRef.current;
+    if (!previousUser) return;
+
+    track('profile_updated');
+    const updated: UserProfile = {
+      ...previousUser,
+      ...updates,
+      dbId: updates.dbId ?? previousUser.dbId,
+      preferences: updates.preferences
+        ? { ...previousUser.preferences, ...updates.preferences }
+        : previousUser.preferences,
+    };
+
+    setCurrentUser(updated);
+
+    const activeSession = sessionRef.current;
+    if (!activeSession?.user) return;
+
+    const { data, error } = await supabase.from('users').upsert({
+      auth_id: activeSession.user.id,
+      email: activeSession.user.email,
+      name: updated.name || '未命名',
+      age: updated.age,
+      hide_age: updated.hideAge ?? false,
+      profile_visible: updated.profileVisible ?? true,
+      gender: updated.gender,
+      bio: updated.bio,
+      region: updated.preferences.region,
+      ai_personality: updated.aiPersonality || null,
+      preferences: {
+        ageMin: updated.preferences.ageMin,
+        ageMax: updated.preferences.ageMax,
+        genderPreference: updated.preferences.genderPreference,
+        preferredRegions: updated.preferences.preferredRegions || [],
+        hiddenMatchIds: updated.preferences.hiddenMatchIds || [],
+      },
+      onboarding_complete: updated.onboardingComplete,
+    }, { onConflict: 'auth_id' }).select('id').single();
+
+    if (error) return;
+
+    const userDbId = data?.id ?? updated.dbId;
+    if (!userDbId) return;
+
+    if (updates.photos) {
+      try {
+        await syncProfilePhotos({
+          authUserId: activeSession.user.id,
+          userDbId,
+          photos: updated.photos,
+        });
+      } catch {
+        return;
+      }
+    }
+
+    setCurrentUser((current) => current ? { ...current, dbId: userDbId } : current);
   }, []);
 
-  // ============================
-  // Memoized context values (prevents unnecessary re-renders)
-  // ============================
+  const likeUser = useCallback(async (userId: string, topicAnswer: string) => {
+    const activeUser = currentUserRef.current;
+    const accessToken = sessionRef.current?.access_token;
+    const targetCard = dailyCardsRef.current.find((card) => card.user.id === userId);
+    if (!activeUser?.dbId || !accessToken || !targetCard?.user.dbId || targetCard.liked) return null;
+
+    track('card_like', { targetUserId: userId });
+    setDailyCards((prev) => prev.map((card) => card.user.id === userId ? { ...card, liked: true, topicAnswer } : card));
+
+    const result = await authorizedJsonFetch<{ matched: boolean; matchId?: string }>('/api/social/like', accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ targetUserDbId: targetCard.user.dbId, topicAnswer }),
+    });
+
+    if (result?.matchId) {
+      track('match_created', { matchedUserId: userId, matchId: result.matchId });
+    }
+
+    await Promise.all([
+      loadLikes(activeUser.dbId, activeUser.id),
+      loadMatches(),
+      refreshDailyCards(),
+    ]);
+
+    return result?.matchId || null;
+  }, [loadLikes, loadMatches, refreshDailyCards]);
+
+  const skipUser = useCallback(async (userId: string) => {
+    const accessToken = sessionRef.current?.access_token;
+    const targetCard = dailyCardsRef.current.find((card) => card.user.id === userId);
+    if (!accessToken || !targetCard?.user.dbId) return;
+
+    track('card_skip', { targetUserId: userId });
+    const result = await authorizedJsonFetch<{ cards: DailyCard[] }>('/api/social/cards', accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'skip', targetUserDbId: targetCard.user.dbId }),
+    });
+    setDailyCards(result?.cards || dailyCardsRef.current.map((card) => card.user.id === userId ? { ...card, skipped: true } : card));
+  }, []);
+
+  const sendMessageAction = useCallback(async (matchId: string, payload: { text?: string; imageDataUrl?: string }) => {
+    const accessToken = sessionRef.current?.access_token;
+    const authUserId = sessionRef.current?.user.id;
+    const activeUser = currentUserRef.current;
+    const activeMatch = matchesRef.current.find((match) => match.id === matchId);
+    const trimmedText = payload.text?.trim() || '';
+    if (!accessToken || (!trimmedText && !payload.imageDataUrl) || !authUserId || !activeUser) return;
+
+    let imageUrl: string | undefined;
+    if (payload.imageDataUrl) {
+      imageUrl = await uploadChatImage({
+        authUserId,
+        matchId,
+        dataUrl: payload.imageDataUrl,
+      });
+    }
+
+    const optimisticTimestamp = new Date().toISOString();
+    const optimisticId = `temp-${matchId}-${Date.now()}`;
+    const optimisticMessage = {
+      id: optimisticId,
+      senderId: authUserId,
+      type: imageUrl ? 'image' as const : 'text' as const,
+      text: trimmedText,
+      imageUrl,
+      timestamp: optimisticTimestamp,
+      readAt: null,
+    };
+
+    setMatches((prev) => prev.map((match) => match.id === matchId
+      ? { ...match, messages: [...match.messages, optimisticMessage] }
+      : match));
+
+    track(imageUrl ? 'chat_image_sent' : 'chat_message_sent');
+    const result = await authorizedJsonFetch<{ message: Match['messages'][number] }>('/api/social/messages', accessToken, {
+      method: 'POST',
+      body: JSON.stringify({
+        matchId,
+        text: trimmedText,
+        kind: imageUrl ? 'image' : 'text',
+        imageUrl,
+      }),
+    });
+
+    if (result?.message) {
+      setMatches((prev) => prev.map((match) => {
+        if (match.id !== matchId) return match;
+        const messages = match.messages.filter((message) => message.id !== optimisticId);
+        return { ...match, messages: [...messages, result.message] };
+      }));
+    }
+
+    if (isDemoBotUser(activeMatch?.otherUser) && trimmedText) {
+      const demoReplyText = buildDemoReply(activeUser.name || '你', trimmedText);
+      const demoReplyId = `demo-reply-${matchId}-${Date.now()}`;
+      const demoReplySenderId = activeMatch?.otherUser?.id || activeMatch?.otherUser?.dbId || 'demo-bot';
+
+      window.setTimeout(() => {
+        setMatches((prev) => prev.map((match) => {
+          if (match.id !== matchId) return match;
+          const alreadyHasReply = match.messages.some((message) =>
+            message.senderId === demoReplySenderId && new Date(message.timestamp).getTime() >= new Date(optimisticTimestamp).getTime()
+          );
+          if (alreadyHasReply) return match;
+          return {
+            ...match,
+            messages: [...match.messages, {
+              id: demoReplyId,
+              senderId: demoReplySenderId,
+              type: 'text',
+              text: demoReplyText,
+              timestamp: new Date().toISOString(),
+              readAt: null,
+            }],
+          };
+        }));
+      }, 900);
+    }
+
+    await loadMatches();
+  }, [buildDemoReply, isDemoBotUser, loadMatches]);
+
+  const removeMatchAction = useCallback(async (matchId: string) => {
+    const activeUser = currentUserRef.current;
+    if (!activeUser) return;
+
+    const hiddenMatchIds = new Set(activeUser.preferences.hiddenMatchIds || []);
+    hiddenMatchIds.add(matchId);
+    await updateProfile({
+      preferences: {
+        ...activeUser.preferences,
+        hiddenMatchIds: Array.from(hiddenMatchIds),
+      },
+    });
+    await loadMatches();
+  }, [loadMatches, updateProfile]);
+
   const authValue = useMemo<AuthState>(() => ({
     currentUser,
     setCurrentUser,
     isLoggedIn: !!currentUser,
     isHydrated,
+    authReady,
+    session,
     login,
     logout,
+    deleteAccount,
     updateProfile,
-  }), [currentUser, isHydrated, login, logout, updateProfile]);
+  }), [currentUser, isHydrated, authReady, session, login, logout, deleteAccount, updateProfile]);
 
   const cardsValue = useMemo<CardsState>(() => ({
     dailyCards,
     refreshDailyCards,
     likeUser,
     skipUser,
-    undoSkip,
     likes,
-  }), [dailyCards, refreshDailyCards, likeUser, skipUser, undoSkip, likes]);
+  }), [dailyCards, refreshDailyCards, likeUser, skipUser, likes]);
 
   const matchesValue = useMemo<MatchesState>(() => ({
     matches,
-    sendMessage,
-    removeMatch,
-  }), [matches, sendMessage, removeMatch]);
+    sendMessage: sendMessageAction,
+    removeMatch: removeMatchAction,
+  }), [matches, sendMessageAction, removeMatchAction]);
 
   const onboardingValue = useMemo<OnboardingState>(() => ({
     onboardingStep,
@@ -466,29 +656,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       <OnboardingContext.Provider value={onboardingValue}>
         <MatchesContext.Provider value={matchesValue}>
           <CardsContext.Provider value={cardsValue}>
-            {isHydrated ? children : (
-              <div style={{
-                minHeight: '100dvh',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'linear-gradient(135deg, #FFF8F0, #FFF3E8)',
-              }}>
-                <div style={{
-                  width: 64, height: 64, borderRadius: 20,
-                  background: 'linear-gradient(135deg, #E8842C, #FF6B6B)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 8px 32px rgba(232, 132, 44, 0.3)',
-                  animation: 'pulse 1.5s ease-in-out infinite',
-                }}>
-                  <span style={{ fontSize: 28 }}>💜</span>
-                </div>
-                <p style={{ marginTop: 16, color: '#E8842C', fontWeight: 600, fontSize: 14 }}>
-                  載入中...
-                </p>
-              </div>
-            )}
+            {children}
           </CardsContext.Provider>
         </MatchesContext.Provider>
       </OnboardingContext.Provider>

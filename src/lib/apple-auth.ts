@@ -2,7 +2,7 @@
  * Apple Sign-In integration via Capacitor
  * 
  * On native iOS: uses @capacitor-community/apple-sign-in plugin
- * On web: falls back to demo login (Apple Sign-In requires native context)
+ * On web: returns an unavailable error because Apple Sign-In requires native context here
  */
 
 import { Capacitor } from '@capacitor/core';

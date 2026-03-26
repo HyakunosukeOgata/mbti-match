@@ -1,51 +1,39 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { mockUsers } from '@/lib/mock-data';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import { getMessagePreview } from '@/lib/chat-message';
 import { UserProfile, Match, LikeAction, DailyCard, ChatMessage } from '@/lib/types';
 import {
   Shield, Users, MessageCircle, Heart, BarChart3, Search, Eye, ChevronLeft,
-  ArrowLeft, Clock, User, Activity, TrendingUp, AlertTriangle, RefreshCw,
+  ArrowLeft, Clock, User, Activity, TrendingUp, AlertTriangle, RefreshCw, Flag,
 } from 'lucide-react';
 
-// ============================
-// 存取碼驗證（SHA-256 hash，不在前端明文暴露密碼）
-// ============================
-async function hashCode(code: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(code);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-// SHA-256 of admin code
-const ADMIN_HASH = 'eb6484e02140e990dd9e9d9193caecb3eee7a911891f37f26cc977575bf049ea';
-
-// ============================
-// Data helpers
-// ============================
-function readLS<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback;
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch { return fallback; }
-}
-
 interface AnalyticsEvent {
+  id: string;
   name: string;
   props?: Record<string, string | number | boolean>;
-  ts: number;
+  ts: string;
 }
 
-function getAllData() {
-  const currentUser = readLS<UserProfile | null>('mbti-match-user', null);
-  const matches = readLS<Match[]>('mbti-match-matches', []);
-  const likes = readLS<LikeAction[]>('mbti-match-likes', []);
-  const dailyRaw = readLS<{ date: string; cards: DailyCard[] } | null>('mbti-match-daily', null);
-  const dailyCards = dailyRaw?.cards || [];
-  const events = readLS<AnalyticsEvent[]>('mochi_analytics', []);
-  const consent = typeof window !== 'undefined' ? localStorage.getItem('mochi_analytics_consent') : null;
-  return { currentUser, matches, likes, dailyCards, events, consent };
+interface Report {
+  id: string;
+  reporterUserId: string;
+  reporterName: string;
+  reportedUserId: string;
+  reportedName: string;
+  reason: string;
+  matchId: string;
+  timestamp: string;
+  status: 'pending' | 'reviewed' | 'dismissed';
+}
+
+interface AdminData {
+  users: UserProfile[];
+  matches: Match[];
+  likes: LikeAction[];
+  dailyCards: DailyCard[];
+  events: AnalyticsEvent[];
+  reports: Report[];
 }
 
 function tsToStr(ts: number | string) {
@@ -53,10 +41,9 @@ function tsToStr(ts: number | string) {
   return d.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
 }
 
-function findUserName(id: string, currentUser: UserProfile | null): string {
-  if (currentUser && currentUser.id === id) return `${currentUser.name}（你）`;
-  const mock = mockUsers.find(u => u.id === id);
-  if (mock) return mock.name;
+function findUserName(id: string, users: UserProfile[]): string {
+  const user = users.find((item) => item.id === id);
+  if (user) return user.name;
   if (id === 'system') return '系統';
   return id;
 }
@@ -64,21 +51,54 @@ function findUserName(id: string, currentUser: UserProfile | null): string {
 // ============================
 // Admin Page
 // ============================
-type Tab = 'overview' | 'users' | 'matches' | 'analytics';
+type Tab = 'overview' | 'users' | 'matches' | 'analytics' | 'reports';
 
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false);
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [tab, setTab] = useState<Tab>('overview');
-  const [data, setData] = useState<ReturnType<typeof getAllData> | null>(null);
+  const [adminCode, setAdminCode] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<AdminData | null>(null);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
 
-  const refresh = useCallback(() => setData(getAllData()), []);
+  const refresh = useCallback(async (overrideCode?: string) => {
+    const effectiveCode = overrideCode || adminCode;
+    if (!effectiveCode) return;
+
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('/api/admin/dashboard', {
+        headers: {
+          'x-admin-code': effectiveCode,
+        },
+      });
+
+      if (!response.ok) {
+        setAuthed(false);
+        setData(null);
+        setError(response.status === 401 ? '存取碼錯誤' : '載入後台資料失敗');
+        return;
+      }
+
+      const nextData = await response.json() as AdminData;
+      setAdminCode(effectiveCode);
+      setAuthed(true);
+      setData(nextData);
+    } catch {
+      setError('載入後台資料失敗');
+    } finally {
+      setLoading(false);
+    }
+  }, [adminCode]);
 
   useEffect(() => {
-    if (authed) refresh();
+    if (authed && adminCode) {
+      void refresh();
+    }
   }, [authed, refresh]);
 
   // Reset detail views when changing tab
@@ -94,7 +114,7 @@ export default function AdminPage() {
     return (
       <div style={styles.loginContainer}>
         <div style={styles.loginCard}>
-          <Shield size={40} color="#E8842C" />
+          <Shield size={40} color="#FF8C6B" />
           <h1 style={styles.loginTitle}>Mochi 管理後台</h1>
           <p style={styles.loginSubtitle}>請輸入管理員存取碼</p>
           <input
@@ -103,9 +123,7 @@ export default function AdminPage() {
             onChange={e => { setCode(e.target.value); setError(''); }}
             onKeyDown={async e => {
               if (e.key === 'Enter') {
-                const h = await hashCode(code);
-                if (h === ADMIN_HASH) setAuthed(true);
-                else setError('存取碼錯誤');
+                void refresh(code);
               }
             }}
             placeholder="存取碼"
@@ -114,14 +132,13 @@ export default function AdminPage() {
           />
           {error && <p style={styles.error}>{error}</p>}
           <button
-            onClick={async () => {
-              const h = await hashCode(code);
-              if (h === ADMIN_HASH) setAuthed(true);
-              else setError('存取碼錯誤');
+            onClick={() => {
+              void refresh(code);
             }}
             style={styles.loginBtn}
+            disabled={loading}
           >
-            進入後台
+            {loading ? '載入中...' : '進入後台'}
           </button>
         </div>
       </div>
@@ -130,11 +147,9 @@ export default function AdminPage() {
 
   if (!data) return null;
 
-  const { currentUser, matches, likes, dailyCards, events, consent } = data;
+  const { users, matches, likes, dailyCards, events, reports } = data;
   const totalMessages = matches.reduce((n, m) => n + m.messages.length, 0);
-  const allUsers = currentUser
-    ? [currentUser, ...mockUsers.filter(u => u.id !== currentUser.id)]
-    : mockUsers;
+  const newestUser = users[0] || null;
 
   // ============================
   // Tab renderers
@@ -143,37 +158,45 @@ export default function AdminPage() {
   const renderOverview = () => (
     <div>
       <div style={styles.statsGrid}>
-        <StatCard icon={<Users size={22} />} label="系統用戶" value={mockUsers.length + (currentUser ? 1 : 0)} color="#E8842C" />
+        <StatCard icon={<Users size={22} />} label="系統用戶" value={users.length} color="#FF8C6B" />
         <StatCard icon={<Heart size={22} />} label="送出喜歡" value={likes.length} color="#FF6B6B" />
         <StatCard icon={<MessageCircle size={22} />} label="配對數" value={matches.length} color="#0D9668" />
         <StatCard icon={<Activity size={22} />} label="訊息總數" value={totalMessages} color="#B27D00" />
         <StatCard icon={<BarChart3 size={22} />} label="分析事件" value={events.length} color="#6366F1" />
-        <StatCard icon={<TrendingUp size={22} />} label="今日卡片" value={dailyCards.length} color="#F4A261" />
+        <StatCard icon={<TrendingUp size={22} />} label="今日卡片" value={dailyCards.length} color="#FFB088" />
       </div>
 
-      {currentUser && (
+      {newestUser && (
         <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>目前登入用戶</h3>
+          <h3 style={styles.sectionTitle}>最新註冊用戶</h3>
           <div style={styles.infoCard}>
-            <div style={styles.infoRow}><strong>名稱：</strong>{currentUser.name}</div>
-            <div style={styles.infoRow}><strong>ID：</strong><span style={styles.mono}>{currentUser.id}</span></div>
-            <div style={styles.infoRow}><strong>MBTI：</strong><span style={styles.badge}>{currentUser.mbtiCode}</span></div>
-            <div style={styles.infoRow}><strong>性別：</strong>{genderLabel(currentUser.gender)}</div>
-            <div style={styles.infoRow}><strong>年齡：</strong>{currentUser.age}</div>
-            <div style={styles.infoRow}><strong>地區：</strong>{currentUser.preferences.region}</div>
-            <div style={styles.infoRow}><strong>Onboarding：</strong>{currentUser.onboardingComplete ? '✅ 完成' : '⏳ 未完成'}</div>
-            <div style={styles.infoRow}><strong>Analytics 同意：</strong>{consent === 'true' ? '✅ 是' : '❌ 否'}</div>
-            <div style={styles.infoRow}><strong>註冊時間：</strong>{currentUser.createdAt}</div>
+            <div style={styles.infoRow}><strong>名稱：</strong>{newestUser.name}</div>
+            <div style={styles.infoRow}><strong>ID：</strong><span style={styles.mono}>{newestUser.id}</span></div>
+            <div style={styles.infoRow}><strong>AI 個性：</strong>{newestUser.aiPersonality ? newestUser.aiPersonality.values.slice(0, 3).join('、') : '尚未分析'}</div>
+            <div style={styles.infoRow}><strong>性別：</strong>{genderLabel(newestUser.gender)}</div>
+            <div style={styles.infoRow}><strong>年齡：</strong>{newestUser.age}</div>
+            <div style={styles.infoRow}><strong>地區：</strong>{newestUser.preferences.region}</div>
+            <div style={styles.infoRow}><strong>Onboarding：</strong>{newestUser.onboardingComplete ? '✅ 完成' : '⏳ 未完成'}</div>
+            <div style={styles.infoRow}><strong>註冊時間：</strong>{newestUser.createdAt}</div>
           </div>
         </div>
       )}
 
-      {!currentUser && (
+      {!newestUser && (
         <div style={{ ...styles.infoCard, textAlign: 'center' as const, padding: 32 }}>
           <AlertTriangle size={32} color="#B27D00" />
-          <p style={{ margin: '12px 0 0', color: '#6B6190' }}>目前沒有用戶登入</p>
+          <p style={{ margin: '12px 0 0', color: '#6B6190' }}>目前沒有任何用戶資料</p>
         </div>
       )}
+
+      <div style={styles.section}>
+        <h3 style={styles.sectionTitle}>檢舉概況</h3>
+        <div style={styles.statsGrid}>
+          <StatCard icon={<Flag size={22} />} label="總檢舉" value={reports.length} color="#FF5A5A" />
+          <StatCard icon={<Clock size={22} />} label="待處理" value={reports.filter((report) => report.status === 'pending').length} color="#F5A623" />
+          <StatCard icon={<Eye size={22} />} label="已審核" value={reports.filter((report) => report.status === 'reviewed').length} color="#0D9668" />
+        </div>
+      </div>
 
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>最近活動</h3>
@@ -200,9 +223,9 @@ export default function AdminPage() {
 
     return (
       <div>
-        <h3 style={styles.sectionTitle}>所有用戶 ({allUsers.length})</h3>
+        <h3 style={styles.sectionTitle}>所有用戶 ({users.length})</h3>
         <div style={styles.userList}>
-          {allUsers.map(user => (
+          {users.map(user => (
             <div
               key={user.id}
               style={styles.userRow}
@@ -219,10 +242,10 @@ export default function AdminPage() {
               <div style={styles.userInfo}>
                 <div style={styles.userName}>
                   {user.name}
-                  {currentUser && user.id === currentUser.id && <span style={styles.youBadge}>目前用戶</span>}
+                  {user.onboardingComplete && <span style={styles.youBadge}>已完成</span>}
                 </div>
                 <div style={styles.userMeta}>
-                  <span style={styles.badge}>{user.mbtiCode}</span>
+                  <span style={styles.badge}>{user.aiPersonality?.values?.[0] || '—'}</span>
                   <span>{genderLabel(user.gender)}</span>
                   <span>{user.age}歲</span>
                   <span>{user.preferences.region}</span>
@@ -251,7 +274,7 @@ export default function AdminPage() {
           )}
           <div>
             <h2 style={{ margin: 0, fontSize: 20 }}>{user.name}</h2>
-            <span style={styles.badge}>{user.mbtiCode}</span>
+            <span style={styles.badge}>{user.aiPersonality?.values?.[0] || '尚未分析'}</span>
           </div>
         </div>
 
@@ -283,14 +306,14 @@ export default function AdminPage() {
         </div>
 
         <div style={styles.detailSection}>
-          <h4 style={styles.detailLabel}>MBTI 詳細</h4>
+          <h4 style={styles.detailLabel}>AI 個性標籤</h4>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-            {(['EI', 'SN', 'TF', 'JP'] as const).map(dim => (
-              <div key={dim} style={styles.mbtiChip}>
-                <strong>{user.mbti[dim].type}</strong>
-                <span style={{ fontSize: 11, color: '#6B6190' }}>{user.mbti[dim].strength}%</span>
+            {user.aiPersonality?.traits?.map(t => (
+              <div key={t.name} style={styles.traitChip}>
+                <strong>{t.name}</strong>
+                <span style={{ fontSize: 11, color: '#6B6190' }}>{t.score}%</span>
               </div>
-            ))}
+            )) || <span style={styles.emptyText}>尚未完成 AI 聊天</span>}
           </div>
         </div>
 
@@ -304,18 +327,20 @@ export default function AdminPage() {
         </div>
 
         <div style={styles.detailSection}>
-          <h4 style={styles.detailLabel}>情境題回答 ({user.scenarioAnswers.length})</h4>
-          {user.scenarioAnswers.length === 0 ? (
-            <span style={styles.emptyText}>尚未回答</span>
+          <h4 style={styles.detailLabel}>AI 個性分析</h4>
+          {!user.aiPersonality ? (
+            <span style={styles.emptyText}>尚未完成 AI 聊天</span>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 6 }}>
-              {user.scenarioAnswers.map((sa, i) => (
-                <div key={i} style={styles.scenarioRow}>
-                  <span style={styles.mono}>{sa.questionId}</span>
-                  <span>我的: [{sa.myAnswer.join(',')}]</span>
-                  <span>期望: [{sa.partnerAnswer.join(',')}]</span>
-                </div>
-              ))}
+              <div style={styles.scenarioRow}>
+                <span>價值觀: {user.aiPersonality.values.join('、')}</span>
+              </div>
+              <div style={styles.scenarioRow}>
+                <span>溝通風格: {user.aiPersonality.communicationStyle}</span>
+              </div>
+              <div style={styles.scenarioRow}>
+                <span>感情期待: {user.aiPersonality.relationshipGoal}</span>
+              </div>
             </div>
           )}
         </div>
@@ -336,8 +361,9 @@ export default function AdminPage() {
         {matches.length > 0 && (
           <div style={styles.userList}>
             {matches.map(match => {
-              const otherUserId = match.users.find(id => id !== currentUser?.id) || match.users[1];
-              const otherName = findUserName(otherUserId, currentUser);
+              const [userA, userB] = match.users;
+              const userAName = findUserName(userA, users);
+              const userBName = findUserName(userB, users);
               const msgCount = match.messages.length;
               const lastMsg = match.messages[match.messages.length - 1];
               return (
@@ -345,7 +371,7 @@ export default function AdminPage() {
                   <div style={{ ...styles.avatarPlaceholder, width: 44, height: 44 }}>💬</div>
                   <div style={styles.userInfo}>
                     <div style={styles.userName}>
-                      {currentUser ? `${currentUser.name} ↔ ${otherName}` : match.users.join(' ↔ ')}
+                      {`${userAName} ↔ ${userBName}`}
                     </div>
                     <div style={styles.userMeta}>
                       <span>{msgCount} 則訊息</span>
@@ -353,7 +379,7 @@ export default function AdminPage() {
                     </div>
                     {lastMsg && (
                       <div style={{ fontSize: 12, color: '#6B6190', marginTop: 2 }}>
-                        最後：{lastMsg.text.slice(0, 30)}...
+                        最後：{getMessagePreview(lastMsg).slice(0, 30)}...
                       </div>
                     )}
                   </div>
@@ -375,7 +401,7 @@ export default function AdminPage() {
                   <Heart size={20} color="#FF6B6B" fill="#FF6B6B" />
                   <div style={styles.userInfo}>
                     <div style={styles.userName}>
-                      {findUserName(like.fromUserId, currentUser)} → {findUserName(like.toUserId, currentUser)}
+                      {findUserName(like.fromUserId, users)} → {findUserName(like.toUserId, users)}
                     </div>
                     <div style={styles.userMeta}>
                       <span>{tsToStr(like.timestamp)}</span>
@@ -404,7 +430,7 @@ export default function AdminPage() {
                   <div style={styles.userInfo}>
                     <div style={styles.userName}>{card.user.name}</div>
                     <div style={styles.userMeta}>
-                      <span style={styles.badge}>{card.user.mbtiCode}</span>
+                      <span style={styles.badge}>{card.user.aiPersonality?.values?.[0] || '—'}</span>
                       <span>相容度 {card.compatibility}%</span>
                       <span>{card.liked ? '❤️ 已喜歡' : card.skipped ? '⏭ 已跳過' : '🔲 未操作'}</span>
                     </div>
@@ -419,8 +445,9 @@ export default function AdminPage() {
   };
 
   const renderChatDetail = (match: Match) => {
-    const otherUserId = match.users.find(id => id !== currentUser?.id) || match.users[1];
-    const otherName = findUserName(otherUserId, currentUser);
+    const [userA, userB] = match.users;
+    const userAName = findUserName(userA, users);
+    const userBName = findUserName(userB, users);
 
     return (
       <div>
@@ -430,11 +457,11 @@ export default function AdminPage() {
 
         <div style={styles.infoCard}>
           <h3 style={{ margin: '0 0 8px' }}>
-            {currentUser ? `${currentUser.name} ↔ ${otherName}` : match.users.join(' ↔ ')}
+            {`${userAName} ↔ ${userBName}`}
           </h3>
           <div style={styles.detailGrid}>
             <DetailItem label="配對 ID" value={match.id} mono />
-            <DetailItem label="狀態" value={match.status === 'active' ? '🟢 活躍' : '🔴 過期'} />
+            <DetailItem label="狀態" value={match.status === 'active' ? '🟢 活躍' : match.status === 'removed' ? '⚪ 已移除' : '🔴 過期'} />
             <DetailItem label="建立時間" value={match.createdAt} />
             <DetailItem label="話題" value={match.topic.text} />
           </div>
@@ -443,7 +470,7 @@ export default function AdminPage() {
             <h4 style={styles.detailLabel}>話題回答</h4>
             {Object.entries(match.topicAnswers).map(([userId, answer]) => (
               <div key={userId} style={{ fontSize: 13, marginBottom: 4 }}>
-                <strong>{findUserName(userId, currentUser)}：</strong>{answer}
+                <strong>{findUserName(userId, users)}：</strong>{answer}
               </div>
             ))}
           </div>
@@ -456,10 +483,23 @@ export default function AdminPage() {
               <div key={msg.id} style={{
                 ...styles.chatBubble,
                 ...(msg.senderId === 'system' ? styles.chatSystem :
-                  msg.senderId === currentUser?.id ? styles.chatMine : styles.chatTheirs),
+                  msg.senderId === userA ? styles.chatMine : styles.chatTheirs),
               }}>
-                <div style={styles.chatSender}>{findUserName(msg.senderId, currentUser)}</div>
-                <div style={styles.chatText}>{msg.text}</div>
+                <div style={styles.chatSender}>{findUserName(msg.senderId, users)}</div>
+                {msg.type === 'image' && msg.imageUrl ? (
+                  <div>
+                    <a href={msg.imageUrl} target="_blank" rel="noreferrer">
+                      <img
+                        src={msg.imageUrl}
+                        alt={msg.text || '聊天圖片'}
+                        style={{ width: 180, maxWidth: '100%', borderRadius: 12, display: 'block', marginBottom: msg.text ? 8 : 0 }}
+                      />
+                    </a>
+                    {msg.text && <div style={styles.chatText}>{msg.text}</div>}
+                  </div>
+                ) : (
+                  <div style={styles.chatText}>{msg.text}</div>
+                )}
                 <div style={styles.chatTime}>{tsToStr(msg.timestamp)}</div>
               </div>
             ))}
@@ -472,8 +512,8 @@ export default function AdminPage() {
 
   const renderAnalytics = () => {
     const now = Date.now();
-    const today = events.filter(e => now - e.ts < 86400000);
-    const week = events.filter(e => now - e.ts < 604800000);
+    const today = events.filter((event) => now - new Date(event.ts).getTime() < 86400000);
+    const week = events.filter((event) => now - new Date(event.ts).getTime() < 604800000);
 
     const countByName = (list: AnalyticsEvent[]) => {
       const map: Record<string, number> = {};
@@ -484,7 +524,7 @@ export default function AdminPage() {
     return (
       <div>
         <div style={styles.statsGrid}>
-          <StatCard icon={<Clock size={22} />} label="今日事件" value={today.length} color="#E8842C" />
+          <StatCard icon={<Clock size={22} />} label="今日事件" value={today.length} color="#FF8C6B" />
           <StatCard icon={<TrendingUp size={22} />} label="本週事件" value={week.length} color="#0D9668" />
           <StatCard icon={<BarChart3 size={22} />} label="總事件" value={events.length} color="#6366F1" />
         </div>
@@ -541,10 +581,95 @@ export default function AdminPage() {
   // ============================
   // Main layout
   // ============================
-  const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
+  const renderReports = () => {
+    const updateReportStatus = async (reportId: string, status: 'reviewed' | 'dismissed') => {
+      const response = await fetch('/api/admin/dashboard', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-code': adminCode,
+        },
+        body: JSON.stringify({ reportId, status }),
+      });
+
+      if (!response.ok) {
+        setError('更新檢舉狀態失敗');
+        return;
+      }
+
+      await refresh();
+    };
+
+    return (
+      <div>
+        <div style={styles.statsGrid}>
+          <StatCard icon={<Flag size={22} />} label="總檢舉" value={reports.length} color="#FF5A5A" />
+          <StatCard icon={<Clock size={22} />} label="待處理" value={reports.filter(r => r.status === 'pending').length} color="#F5A623" />
+          <StatCard icon={<Eye size={22} />} label="已審核" value={reports.filter(r => r.status === 'reviewed').length} color="#0D9668" />
+          <StatCard icon={<AlertTriangle size={22} />} label="已駁回" value={reports.filter(r => r.status === 'dismissed').length} color="#8B7355" />
+        </div>
+
+        {reports.length === 0 ? (
+          <div style={{ ...styles.infoCard, textAlign: 'center' as const, padding: 40 }}>
+            <Shield size={40} color="#0D9668" />
+            <p style={{ margin: '12px 0 0', color: '#3D2C1E', fontWeight: 600 }}>沒有任何檢舉 🎉</p>
+            <p style={{ margin: '4px 0 0', color: '#8B7355', fontSize: 13 }}>目前一切正常</p>
+          </div>
+        ) : (
+          <div style={styles.userList}>
+            {reports.map((report, i) => {
+              const status = report.status;
+              const statusLabel = status === 'pending' ? '🟡 待處理' : status === 'reviewed' ? '🟢 已審核' : '⚪ 已駁回';
+              const statusColor = status === 'pending' ? '#B27D00' : status === 'reviewed' ? '#0D9668' : '#8B7355';
+              return (
+                <div key={report.id} style={{ ...styles.userRow, cursor: 'default', flexDirection: 'column' as const, alignItems: 'stretch' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ ...styles.avatarPlaceholder, width: 44, height: 44, background: 'linear-gradient(135deg,#FF5A5A,#FF8C6B)' }}>🚨</div>
+                    <div style={styles.userInfo}>
+                      <div style={styles.userName}>
+                        被檢舉：{report.reportedName}
+                        <span style={{ ...styles.badge, background: `${statusColor}15`, color: statusColor, marginLeft: 8 }}>{statusLabel}</span>
+                      </div>
+                      <div style={styles.userMeta}>
+                        <span>檢舉人：{report.reporterName}</span>
+                        <span>原因：{report.reason}</span>
+                        <span>配對 ID：{report.matchId ? `${report.matchId.slice(0, 12)}...` : '—'}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#8B7355', marginTop: 2 }}>
+                        {tsToStr(report.timestamp)}
+                      </div>
+                    </div>
+                  </div>
+                  {status === 'pending' && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 12, paddingTop: 12, borderTop: '1px solid #FFF5EB' }}>
+                      <button
+                        style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', background: '#FF5A5A', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                        onClick={() => { void updateReportStatus(report.id, 'reviewed'); }}
+                      >
+                        ⚠️ 標記已審核
+                      </button>
+                      <button
+                        style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: '1.5px solid #E8DDD4', background: '#fff', color: '#8B7355', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                        onClick={() => { void updateReportStatus(report.id, 'dismissed'); }}
+                      >
+                        駁回
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const tabs: { key: Tab; label: string; icon: ReactNode }[] = [
     { key: 'overview', label: '概覽', icon: <BarChart3 size={18} /> },
     { key: 'users', label: '用戶', icon: <Users size={18} /> },
     { key: 'matches', label: '配對聊天', icon: <MessageCircle size={18} /> },
+    { key: 'reports', label: '檢舉', icon: <Flag size={18} /> },
     { key: 'analytics', label: '分析', icon: <Activity size={18} /> },
   ];
 
@@ -555,7 +680,7 @@ export default function AdminPage() {
           <Shield size={24} color="#fff" />
           <h1 style={styles.headerTitle}>Mochi 管理後台</h1>
         </div>
-        <button onClick={refresh} style={styles.refreshBtn} title="重新載入資料">
+        <button onClick={() => { void refresh(); }} style={styles.refreshBtn} title="重新載入資料">
           <RefreshCw size={18} />
         </button>
       </header>
@@ -577,6 +702,7 @@ export default function AdminPage() {
         {tab === 'overview' && renderOverview()}
         {tab === 'users' && renderUsers()}
         {tab === 'matches' && renderMatches()}
+        {tab === 'reports' && renderReports()}
         {tab === 'analytics' && renderAnalytics()}
       </main>
     </div>
@@ -615,22 +741,22 @@ function genderLabel(g: string) {
 const styles: Record<string, React.CSSProperties> = {
   // Login
   loginContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100dvh', background: '#FFF8F0', padding: 20 },
-  loginCard: { background: '#fff', borderRadius: 20, padding: 40, textAlign: 'center', maxWidth: 360, width: '100%', boxShadow: '0 4px 24px rgba(232,132,44,0.08)' },
+  loginCard: { background: '#fff', borderRadius: 20, padding: 40, textAlign: 'center', maxWidth: 360, width: '100%', boxShadow: '0 4px 24px rgba(255,140,107,0.08)' },
   loginTitle: { fontSize: 22, fontWeight: 700, margin: '16px 0 4px', color: '#3D2C1E' },
   loginSubtitle: { fontSize: 14, color: '#8B7355', margin: '0 0 20px' },
   loginInput: { width: '100%', padding: '12px 16px', border: '2px solid #F0E6D8', borderRadius: 12, fontSize: 16, textAlign: 'center', outline: 'none' },
-  loginBtn: { width: '100%', padding: '12px 0', marginTop: 16, background: 'linear-gradient(135deg,#E8842C,#F4A261)', color: '#fff', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 600, cursor: 'pointer' },
+  loginBtn: { width: '100%', padding: '12px 0', marginTop: 16, background: 'linear-gradient(135deg,#FF8C6B,#FFB088)', color: '#fff', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 600, cursor: 'pointer' },
   error: { color: '#E55B5B', fontSize: 13, margin: '8px 0 0' },
 
   // Layout
   container: { minHeight: '100dvh', background: '#FFF3E8' },
-  header: { background: 'linear-gradient(135deg,#E8842C,#C56D1A)', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  header: { background: 'linear-gradient(135deg,#FF8C6B,#E06B48)', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   headerLeft: { display: 'flex', alignItems: 'center', gap: 10 },
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: 700, margin: 0 },
   refreshBtn: { background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8, padding: 8, cursor: 'pointer', color: '#fff', display: 'flex' },
   tabBar: { display: 'flex', background: '#fff', borderBottom: '1px solid #F0E6D8', overflowX: 'auto' },
   tab: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px 8px', fontSize: 13, fontWeight: 500, color: '#8B7355', border: 'none', borderBottom: '3px solid transparent', background: 'none', cursor: 'pointer', whiteSpace: 'nowrap' },
-  tabActive: { color: '#E8842C', borderBottomColor: '#E8842C', fontWeight: 700 },
+  tabActive: { color: '#FF8C6B', borderBottomColor: '#FF8C6B', fontWeight: 700 },
   main: { padding: 16, maxWidth: 800, margin: '0 auto' },
 
   // Stats
@@ -657,10 +783,10 @@ const styles: Record<string, React.CSSProperties> = {
   userInfo: { flex: 1, minWidth: 0 },
   userName: { fontSize: 15, fontWeight: 600, color: '#3D2C1E', display: 'flex', alignItems: 'center', gap: 8 },
   userMeta: { fontSize: 12, color: '#8B7355', display: 'flex', gap: 8, marginTop: 2, flexWrap: 'wrap' },
-  youBadge: { fontSize: 10, background: '#E8842C', color: '#fff', padding: '2px 8px', borderRadius: 6, fontWeight: 600 },
+  youBadge: { fontSize: 10, background: '#FF8C6B', color: '#fff', padding: '2px 8px', borderRadius: 6, fontWeight: 600 },
 
   // Detail
-  backBtn: { display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#E8842C', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: '8px 0', marginBottom: 12 },
+  backBtn: { display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#FF8C6B', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: '8px 0', marginBottom: 12 },
   detailGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginTop: 12 },
   detailItem: { display: 'flex', flexDirection: 'column', gap: 2 },
   detailItemLabel: { fontSize: 11, color: '#8B7355', fontWeight: 600, textTransform: 'uppercase' },
@@ -669,11 +795,11 @@ const styles: Record<string, React.CSSProperties> = {
   bioText: { fontSize: 14, color: '#3D2C1E', lineHeight: 1.6, margin: 0, background: '#FFF5EB', padding: 12, borderRadius: 10 },
   scenarioRow: { display: 'flex', gap: 12, fontSize: 12, color: '#8B7355', padding: '6px 10px', background: '#FAFAFA', borderRadius: 8 },
 
-  // MBTI
-  mbtiChip: { display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#FFF5EB', borderRadius: 10, padding: '8px 16px', minWidth: 56 },
+  // Trait chip
+  traitChip: { display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#FFF5EB', borderRadius: 10, padding: '8px 16px', minWidth: 56 },
 
   // Badge
-  badge: { background: '#FFF5EB', color: '#E8842C', padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 600 },
+  badge: { background: '#FFF5EB', color: '#FF8C6B', padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 600 },
   mono: { fontFamily: 'monospace', fontSize: 12, color: '#8B7355', wordBreak: 'break-all' },
   emptyText: { color: '#F4B183', fontSize: 13, fontStyle: 'italic' },
 
@@ -681,7 +807,7 @@ const styles: Record<string, React.CSSProperties> = {
   chatContainer: { display: 'flex', flexDirection: 'column', gap: 8, background: '#F9F6FF', borderRadius: 16, padding: 16, maxHeight: 500, overflowY: 'auto' },
   chatBubble: { maxWidth: '85%', borderRadius: 16, padding: '10px 14px' },
   chatSystem: { alignSelf: 'center', background: '#F0E6D8', color: '#8B7355', textAlign: 'center', fontSize: 13, borderRadius: 12, maxWidth: '90%' },
-  chatMine: { alignSelf: 'flex-end', background: '#E8842C', color: '#fff' },
+  chatMine: { alignSelf: 'flex-end', background: '#FF8C6B', color: '#fff' },
   chatTheirs: { alignSelf: 'flex-start', background: '#fff', color: '#3D2C1E', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' },
   chatSender: { fontSize: 11, fontWeight: 600, marginBottom: 2, opacity: 0.7 },
   chatText: { fontSize: 14, lineHeight: 1.5, wordBreak: 'break-word' },
@@ -690,7 +816,7 @@ const styles: Record<string, React.CSSProperties> = {
   // Activity
   activityList: { display: 'flex', flexDirection: 'column', gap: 6 },
   activityItem: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '8px 12px', background: '#fff', borderRadius: 10 },
-  activityDot: { width: 8, height: 8, borderRadius: '50%', background: '#E8842C', flexShrink: 0 },
+  activityDot: { width: 8, height: 8, borderRadius: '50%', background: '#FF8C6B', flexShrink: 0 },
   activityName: { fontWeight: 600, color: '#3D2C1E' },
   activityProps: { fontSize: 11, color: '#8B7355', fontFamily: 'monospace', flex: 1 },
   activityTime: { fontSize: 11, color: '#F4B183', whiteSpace: 'nowrap' },
@@ -699,7 +825,7 @@ const styles: Record<string, React.CSSProperties> = {
   barRow: { display: 'flex', alignItems: 'center', gap: 10 },
   barLabel: { width: 140, fontSize: 13, fontWeight: 500, color: '#3D2C1E', textAlign: 'right' },
   barTrack: { flex: 1, height: 20, background: '#FFF5EB', borderRadius: 6, overflow: 'hidden' },
-  barFill: { height: '100%', background: 'linear-gradient(90deg,#E8842C,#F4A261)', borderRadius: 6, transition: 'width 0.3s' },
+  barFill: { height: '100%', background: 'linear-gradient(90deg,#FF8C6B,#FFB088)', borderRadius: 6, transition: 'width 0.3s' },
   barCount: { width: 30, fontSize: 13, fontWeight: 700, color: '#3D2C1E' },
 
   // Event table
