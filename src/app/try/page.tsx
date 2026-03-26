@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Sparkles, Loader2, Heart, ArrowRight } from 'lucide-react';
-import Link from 'next/link';
+import { Send, Sparkles, Loader2, Heart, ArrowRight, Mail, Apple } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { signInWithOAuth, sendEmailOtp } from '@/lib/auth';
+import { useApp } from '@/lib/store';
 
 interface ChatMsg {
   role: 'user' | 'assistant';
@@ -10,6 +12,130 @@ interface ChatMsg {
 }
 
 const STORAGE_KEY = 'mochi_try_chat';
+
+function SignupInline({ onRestart }: { onRestart: () => void }) {
+  const [email, setEmail] = useState('');
+  const [emailSent, setEmailSent] = useState(false);
+  const [loading, setLoading] = useState('');
+  const [error, setError] = useState('');
+  const [oauthUrl, setOauthUrl] = useState('');
+
+  const handleOAuth = async (provider: 'google' | 'apple') => {
+    setLoading(provider);
+    setError('');
+    setOauthUrl('');
+    try {
+      const { data, error: authError } = await signInWithOAuth(provider);
+      setLoading('');
+      if (authError) { setError(authError.message); return; }
+      if (data?.url) setOauthUrl(data.url);
+    } catch (e: unknown) {
+      setLoading('');
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleSendEmail = async () => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setError('請輸入正確的 Email');
+      return;
+    }
+    setLoading('email');
+    setError('');
+    const { error: authError } = await sendEmailOtp(trimmed);
+    setLoading('');
+    if (authError) { setError('Email 發送失敗：' + authError.message); return; }
+    setEmailSent(true);
+  };
+
+  return (
+    <div className="mt-6 space-y-4">
+      <div className="text-center">
+        <p className="text-sm font-semibold mb-1">喜歡你的檔案？</p>
+        <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>註冊後就能開始配對，個性檔案會自動帶入</p>
+      </div>
+
+      <div className="rounded-2xl p-5 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+        {!emailSent ? (
+          <>
+            {/* Email */}
+            <div>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSendEmail(); }}
+                placeholder="你的 Email"
+                className="w-full px-4 py-3 rounded-2xl text-sm outline-none"
+                style={{ border: '1px solid var(--border)', background: 'var(--bg-input)' }}
+                autoComplete="email"
+              />
+            </div>
+            <button
+              className="w-full py-3 rounded-2xl text-white font-semibold flex items-center justify-center gap-2"
+              style={{ background: 'linear-gradient(135deg, #FF8C6B, #FF6B8A)' }}
+              onClick={handleSendEmail}
+              disabled={!!loading}
+            >
+              {loading === 'email' ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
+              Email 註冊
+            </button>
+            <div className="flex items-center gap-3 my-1">
+              <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>或</span>
+              <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+            </div>
+            {/* Google */}
+            <button
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl font-medium text-sm"
+              style={{ border: '1px solid var(--border)', color: 'var(--text)' }}
+              onClick={() => handleOAuth('google')}
+              disabled={!!loading}
+            >
+              {loading === 'google' ? <Loader2 size={16} className="animate-spin" /> : <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>}
+              Google 註冊
+            </button>
+            {/* Apple */}
+            <button
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl font-medium text-sm text-white"
+              style={{ background: '#000' }}
+              onClick={() => handleOAuth('apple')}
+              disabled={!!loading}
+            >
+              {loading === 'apple' ? <Loader2 size={16} className="animate-spin" /> : <Apple size={16} />}
+              Apple 註冊
+            </button>
+          </>
+        ) : (
+          <div className="text-center space-y-3 py-2">
+            <div className="w-14 h-14 rounded-full mx-auto flex items-center justify-center" style={{ background: 'var(--bg-input)' }}>
+              <Mail size={24} className="text-primary" />
+            </div>
+            <p className="text-sm font-medium">驗證信已寄出！</p>
+            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+              請檢查 <strong>{email}</strong> 的信箱，點擊連結即可完成註冊
+            </p>
+            <p className="text-[11px]" style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>沒看到？請檢查垃圾郵件</p>
+            <button className="text-xs text-primary underline" onClick={() => setEmailSent(false)}>
+              重新輸入
+            </button>
+          </div>
+        )}
+        {error && <p className="text-xs text-center" style={{ color: 'var(--danger)' }}>{error}</p>}
+        {oauthUrl && <a href={oauthUrl} className="block text-center text-xs text-primary underline">點此手動前往註冊 →</a>}
+      </div>
+
+      <button onClick={onRestart} className="w-full py-3 rounded-2xl text-sm font-medium" style={{ color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>
+        重新聊一次
+      </button>
+
+      <p className="text-[11px] text-center" style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
+        註冊即表示你同意我們的<a href="/terms" className="text-primary underline">服務條款</a>和<a href="/privacy" className="text-primary underline">隱私政策</a>
+      </p>
+    </div>
+  );
+}
 
 function loadSaved(): { messages: ChatMsg[]; readyToAnalyze: boolean; result: Record<string, unknown> | null } | null {
   try {
@@ -28,6 +154,8 @@ function saveState(messages: ChatMsg[], readyToAnalyze: boolean, result: Record<
 }
 
 export default function TryPage() {
+  const { isLoggedIn, authReady, currentUser } = useApp();
+  const router = useRouter();
   const saved = useRef(loadSaved());
   const [messages, setMessages] = useState<ChatMsg[]>(saved.current?.messages || []);
   const [input, setInput] = useState('');
@@ -38,6 +166,19 @@ export default function TryPage() {
   const [result, setResult] = useState<Record<string, unknown> | null>(saved.current?.result || null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // If user just authenticated, redirect to onboarding (/ will route them)
+  useEffect(() => {
+    if (!authReady) return;
+    if (isLoggedIn) {
+      // Logged in user with saved /try result → go to onboarding
+      if (currentUser?.onboardingComplete) {
+        router.replace('/home');
+      } else {
+        router.replace('/');
+      }
+    }
+  }, [authReady, isLoggedIn, currentUser, router]);
 
   const userMessageCount = messages.filter(m => m.role === 'user').length;
 
@@ -289,19 +430,8 @@ export default function TryPage() {
             </div>
           )}
 
-          {/* CTA */}
-          <div className="mt-6 space-y-3">
-            <Link href="/" className="block">
-              <button className="w-full py-3.5 rounded-2xl text-white font-semibold flex items-center justify-center gap-2" style={{ background: 'linear-gradient(135deg, #FF8C6B, #FF6B8A)' }}>
-                <Heart size={18} />
-                註冊 Mochi，開始配對
-                <ArrowRight size={16} />
-              </button>
-            </Link>
-            <button onClick={restart} className="w-full py-3 rounded-2xl text-sm font-medium" style={{ color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>
-              重新聊一次
-            </button>
-          </div>
+          {/* CTA — Inline Registration */}
+          <SignupInline onRestart={restart} />
         </div>
       </div>
     );
