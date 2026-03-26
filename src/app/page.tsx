@@ -192,9 +192,9 @@ export default function LoginPage() {
           </div>
           <p className="text-text-secondary text-xs mt-6 text-center relative z-10 opacity-80">
             登入即表示你同意我們的
-            <a href="/terms" className="text-primary underline py-2 inline-block">服務條款</a>
+            <a href="/terms" className="text-primary underline py-3 inline-block">服務條款</a>
             和
-            <a href="/privacy" className="text-primary underline py-2 inline-block">隱私政策</a>
+            <a href="/privacy" className="text-primary underline py-3 inline-block">隱私政策</a>
           </p>
         </>
       )}

@@ -75,7 +75,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-lg font-bold text-text mb-2">8. 隱私保護</h2>
-          <p>您的個人資料受我們的<a href="/privacy" className="text-primary underline py-2 inline-block">隱私權政策</a>保護。使用本服務即表示您同意該政策中的資料處理方式。</p>
+          <p>您的個人資料受我們的<a href="/privacy" className="text-primary underline py-3 inline-block">隱私權政策</a>保護。使用本服務即表示您同意該政策中的資料處理方式。</p>
         </section>
 
         <section>

@@ -44,7 +44,7 @@ export function ConsentBanner() {
         <p className="text-white text-sm mb-1 font-medium">🍪 使用體驗分析</p>
         <p className="text-white/70 text-xs mb-3 leading-relaxed">
           我們使用匿名分析來改善服務體驗。資料僅儲存在你的裝置上，不會傳送至伺服器。
-          詳情請參考<a href="/privacy" className="text-purple-300 underline py-2 inline-block">隱私權政策</a>。
+          詳情請參考<a href="/privacy" className="text-purple-300 underline py-3 inline-block">隱私權政策</a>。
         </p>
         <div className="flex gap-2">
           <button
