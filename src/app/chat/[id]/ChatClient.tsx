@@ -31,6 +31,7 @@ export default function ChatClient({ matchId }: { matchId: string }) {
   const [showPhotoConsent, setShowPhotoConsent] = useState(false);
   const [photoConsentStatus, setPhotoConsentStatus] = useState<PhotoConsentStatus>('none');
   const [photoConsentRequester, setPhotoConsentRequester] = useState<string | null>(null);
+  const [dbStarters, setDbStarters] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const REPORT_REASONS = ['不當言行', '假帳號 / 詐騙', '騷擾或威脅', '不雅照片', '未成年', '其他'];
@@ -130,6 +131,21 @@ export default function ChatClient({ matchId }: { matchId: string }) {
       void supabase.removeChannel(channel);
     };
   }, [currentUser?.dbId, match, matchId]);
+
+  // Load AI-generated conversation starters from DB
+  useEffect(() => {
+    if (!matchId || !isUuidLike(matchId)) return;
+    supabase
+      .from('conversation_starters')
+      .select('starters')
+      .eq('match_id', matchId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.starters && Array.isArray(data.starters) && data.starters.length > 0) {
+          setDbStarters(data.starters);
+        }
+      });
+  }, [matchId]);
 
   if (!isUuidLike(matchId)) {
     return (
@@ -387,7 +403,7 @@ export default function ChatClient({ matchId }: { matchId: string }) {
                 ))}
               </div>
               <div className="flex flex-wrap gap-2">
-                {insight.starters.map((starter) => (
+                {(dbStarters.length > 0 ? dbStarters : insight.starters).map((starter) => (
                   <button
                     key={starter}
                     type="button"
@@ -407,11 +423,11 @@ export default function ChatClient({ matchId }: { matchId: string }) {
             <div className="flex justify-center">
               <div className="chat-bubble system">🎉 配對成功！{insight?.summary || '從今天的話題開始聊聊吧。'}</div>
             </div>
-            {insight && insight.starters.length > 0 && (
+            {(() => { const starters = dbStarters.length > 0 ? dbStarters : (insight?.starters || []); return starters.length > 0; })() && (
               <div className="px-2">
-                <p className="text-xs text-text-secondary text-center mb-2">不知道說什麼？試試這些開場：</p>
+                <p className="text-xs text-text-secondary text-center mb-2">{dbStarters.length > 0 ? '✨ AI 為你準備的開場白：' : '不知道說什麼？試試這些開場：'}</p>
                 <div className="space-y-2">
-                  {insight.starters.map((starter) => (
+                  {(dbStarters.length > 0 ? dbStarters : (insight?.starters || [])).map((starter) => (
                     <button
                       key={starter}
                       type="button"

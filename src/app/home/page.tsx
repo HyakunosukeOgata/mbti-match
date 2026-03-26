@@ -9,6 +9,7 @@ import BottomNav from '@/components/BottomNav';
 import PhotoGallery from '@/components/PhotoGallery';
 import { Heart, Clock, MessageCircle, Sparkles, ChevronDown, Zap, X, Send } from 'lucide-react';
 import { track } from '@/lib/analytics';
+import PersonalityRadar from '@/components/PersonalityRadar';
 
 export default function HomePage() {
   const { currentUser, authReady, dailyCards, refreshDailyCards, likeUser, skipUser, matches, session } = useApp();
@@ -588,6 +589,16 @@ export default function HomePage() {
                       );
                     })()}
                   </div>
+
+                  {/* Personality Radar */}
+                  {card.user.aiPersonality?.scoringFeatures && (
+                    <div className="p-4 rounded-2xl" style={{ background: '#FFFDFC', border: '1px solid rgba(255,140,107,0.08)' }}>
+                      <p className="text-xs font-semibold text-text-secondary mb-3 flex items-center gap-1">
+                        <Sparkles size={11} /> 個性雷達
+                      </p>
+                      <PersonalityRadar features={card.user.aiPersonality.scoringFeatures} />
+                    </div>
+                  )}
 
                   <div className="p-4 rounded-2xl space-y-3" style={{ background: '#FFFDFC', border: '1px solid rgba(255,140,107,0.08)' }}>
                     {/* 推薦理由 (from Kin) */}
