@@ -1,30 +1,25 @@
 'use client';
 
 import { useApp } from '@/lib/store';
-import { useState, useEffect, useRef } from 'react';
-import { Sparkles, Heart, Smartphone, Mail, Apple, ArrowLeft, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Sparkles, Heart, Mail, Apple, ArrowLeft, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { track } from '@/lib/analytics';
-import { signInWithOAuth, sendPhoneOtp, sendEmailOtp, signInWithPassword, verifyPhoneOtp } from '@/lib/auth';
+import { signInWithOAuth, sendEmailOtp, signInWithPassword } from '@/lib/auth';
 
 export default function LoginPage() {
   const { isLoggedIn, authReady, currentUser, onboardingStep } = useApp();
   const router = useRouter();
   const demoEnabled = process.env.NODE_ENV !== 'production';
 
-  const [step, setStep] = useState<'main' | 'methods' | 'phone' | 'email'>('main');
+  const [step, setStep] = useState<'main' | 'methods' | 'email'>('main');
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [demoName, setDemoName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
   const [email, setEmail] = useState('');
   const [emailSent, setEmailSent] = useState(false);
   const [loading, setLoading] = useState('');
   const [oauthUrl, setOauthUrl] = useState('');
   const [error, setError] = useState('');
-  const [countdown, setCountdown] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   useEffect(() => {
     if (!authReady) return;
@@ -36,10 +31,6 @@ export default function LoginPage() {
       track('page_view', { page: 'login' });
     }
   }, [authReady, isLoggedIn, currentUser, onboardingStep, router]);
-
-  useEffect(() => {
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, []);
 
   // Force unregister service workers on login page to avoid stale cache
   useEffect(() => {
@@ -74,47 +65,6 @@ export default function LoginPage() {
       setLoading('');
       setError(`登入時發生錯誤：${e instanceof Error ? e.message : String(e)}`);
     }
-  };
-
-  const handleSendOtp = async () => {
-    const cleaned = phone.replace(/\s/g, '');
-    if (!cleaned || cleaned.length < 8) {
-      setError('請輸入正確的手機號碼（含國碼，如 +886912345678）');
-      return;
-    }
-    setLoading('phone');
-    setError('');
-    const { error: authError } = await sendPhoneOtp(cleaned);
-    setLoading('');
-    if (authError) {
-      setError('簡訊發送失敗：' + authError.message);
-      return;
-    }
-    setOtpSent(true);
-    setCountdown(60);
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) { clearInterval(timerRef.current); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  const handleVerifyOtp = async () => {
-    if (otpCode.length !== 6) {
-      setError('請輸入 6 位數驗證碼');
-      return;
-    }
-    setLoading('verify');
-    setError('');
-    const cleaned = phone.replace(/\s/g, '');
-    const { error: authError } = await verifyPhoneOtp(cleaned, otpCode);
-    setLoading('');
-    if (authError) {
-      setError('驗證碼錯誤或已過期');
-    }
-    // success → onAuthStateChange in store handles the rest
   };
 
   const handleSendEmail = async () => {
@@ -289,83 +239,6 @@ export default function LoginPage() {
             {error && <p className="text-xs text-red-500 text-center">{error}</p>}
             {oauthUrl && (
               <a href={oauthUrl} className="block text-center text-xs text-primary underline mt-2">點此手動前往登入 →</a>
-            )}
-          </div>
-        </div>
-      )}
-
-      {step === 'phone' && (
-        <div className="w-full space-y-4 animate-slide-up relative z-10" style={{ animationDelay: '0.15s' }}>
-          <div className="bg-white rounded-3xl p-6 space-y-4 shadow-sm" style={{ border: '1px solid #F2E8E0' }}>
-            <div className="flex items-center gap-2">
-              <button onClick={() => { setStep('methods'); setError(''); setOtpSent(false); setOtpCode(''); }} className="p-1 rounded-full hover:bg-gray-100 transition-colors">
-                <ArrowLeft size={20} className="text-text-secondary" />
-              </button>
-              <p className="text-sm font-medium text-text-secondary">手機驗證</p>
-            </div>
-
-            {!otpSent ? (
-              <>
-                <div>
-                  <label className="text-xs text-text-secondary mb-1 block">手機號碼</label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    placeholder="+886 912 345 678"
-                    className="w-full px-4 py-3 rounded-2xl text-sm outline-none transition-all"
-                    style={{ border: '1px solid #E8DDD5', background: '#FFFAF7' }}
-                    autoFocus
-                  />
-                  <p className="text-[11px] text-text-secondary opacity-60 mt-1">請輸入含國碼的手機號碼</p>
-                </div>
-                {error && <p className="text-xs text-red-500 text-center">{error}</p>}
-                <button
-                  className="btn-primary w-full flex items-center justify-center gap-2"
-                  onClick={handleSendOtp}
-                  disabled={!!loading}
-                >
-                  {loading === 'phone' ? <Loader2 size={16} className="animate-spin" /> : <Smartphone size={16} />}
-                  發送驗證碼
-                </button>
-              </>
-            ) : (
-              <>
-                <p className="text-sm text-text-secondary text-center">
-                  驗證碼已發送至 <strong>{phone}</strong>
-                </p>
-                <div>
-                  <label className="text-xs text-text-secondary mb-1 block">驗證碼</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={6}
-                    value={otpCode}
-                    onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                    placeholder="6 位數驗證碼"
-                    className="w-full px-4 py-3 rounded-2xl text-sm outline-none transition-all text-center tracking-[0.5em] font-mono text-lg"
-                    style={{ border: '1px solid #E8DDD5', background: '#FFFAF7' }}
-                    autoFocus
-                    onKeyDown={e => { if (e.key === 'Enter') handleVerifyOtp(); }}
-                  />
-                </div>
-                {error && <p className="text-xs text-red-500 text-center">{error}</p>}
-                <button
-                  className="btn-primary w-full flex items-center justify-center gap-2"
-                  onClick={handleVerifyOtp}
-                  disabled={!!loading}
-                >
-                  {loading === 'verify' && <Loader2 size={16} className="animate-spin" />}
-                  確認驗證碼
-                </button>
-                <button
-                  className="text-xs text-text-secondary text-center w-full"
-                  onClick={handleSendOtp}
-                  disabled={countdown > 0 || !!loading}
-                >
-                  {countdown > 0 ? `重新發送（${countdown}s）` : '重新發送驗證碼'}
-                </button>
-              </>
             )}
           </div>
         </div>

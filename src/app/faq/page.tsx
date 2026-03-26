@@ -16,7 +16,7 @@ const sections: { title: string; icon: string; items: FAQItem[] }[] = [
     items: [
       {
         q: '如何開始使用 Mochi 默契？',
-        a: '1. 選擇登入方式（手機、Gmail 或 Apple）\n2. 跟小默聊五分鐘，讓系統了解你的個性\n3. 填寫個人資料與照片\n\n完成後系統每天會推薦契合的對象給你！',
+        a: '1. 選擇登入方式（Email、Gmail 或 Apple）\n2. 跟小默聊五分鐘，讓系統了解你的個性\n3. 填寫個人資料與照片\n\n完成後系統每天會推薦契合的對象給你！',
       },
       {
         q: '如何提高配對成功率？',
