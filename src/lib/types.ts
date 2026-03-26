@@ -57,6 +57,13 @@ export interface UserProfile {
     region: string;
     preferredRegions?: string[];  // multi-select: cities user wants to match with
     hiddenMatchIds?: string[];
+    notificationPrefs?: {
+      matches: boolean;
+      messages: boolean;
+      likes: boolean;
+      weekly: boolean;
+      system: boolean;
+    };
   };
   onboardingComplete: boolean;
   createdAt: string;

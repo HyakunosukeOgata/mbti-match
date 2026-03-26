@@ -357,6 +357,11 @@ CREATE POLICY "blocked_insert_own" ON blocked_users
     blocker_id IN (SELECT id FROM users WHERE auth_id = auth.uid())
   );
 
+CREATE POLICY "blocked_delete_own" ON blocked_users
+  FOR DELETE USING (
+    blocker_id IN (SELECT id FROM users WHERE auth_id = auth.uid())
+  );
+
 -- Reports: 只能新增，不能看（管理員用 service role）
 CREATE POLICY "reports_insert_own" ON reports
   FOR INSERT WITH CHECK (

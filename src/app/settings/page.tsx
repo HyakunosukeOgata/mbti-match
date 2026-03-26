@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import BottomNav from '@/components/BottomNav';
 import React from 'react';
-import { LogOut, Sliders, Shield, ChevronRight, Camera, Trash2, Eye, RefreshCw } from 'lucide-react';
+import { LogOut, Sliders, Shield, ChevronRight, Camera, Trash2, Eye, RefreshCw, ShieldOff, Heart, Bell } from 'lucide-react';
 import { track } from '@/lib/analytics';
 import { moderateBio, moderateName } from '@/lib/moderation';
 import { TAIWAN_CITIES } from '@/lib/types';
@@ -329,6 +329,57 @@ export default function SettingsPage() {
               <div>
                 <h3 className="font-bold">重新聊天分析</h3>
                 <p className="text-xs text-text-secondary mt-0.5">保留照片與自介，只更新個性分析結果</p>
+              </div>
+            </div>
+            <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform text-text-secondary" />
+          </div>
+        </button>
+
+        {/* Notification Preferences */}
+        <button
+          className="card w-full text-left group"
+          onClick={() => router.push('/settings/notifications')}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255, 140, 107, 0.08)' }}>
+                <Bell size={15} className="text-primary" />
+              </div>
+              <h3 className="font-bold">🔔 通知設定</h3>
+            </div>
+            <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform text-text-secondary" />
+          </div>
+        </button>
+
+        {/* Blocked Users */}
+        <button
+          className="card w-full text-left group"
+          onClick={() => router.push('/settings/blocked')}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255, 140, 107, 0.08)' }}>
+                <ShieldOff size={15} className="text-primary" />
+              </div>
+              <h3 className="font-bold">🚫 封鎖名單</h3>
+            </div>
+            <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform text-text-secondary" />
+          </div>
+        </button>
+
+        {/* Safety Tips */}
+        <button
+          className="card w-full text-left group"
+          onClick={() => router.push('/safety')}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255, 140, 107, 0.08)' }}>
+                <Heart size={15} className="text-primary" />
+              </div>
+              <div>
+                <h3 className="font-bold">🛡️ 安全指引</h3>
+                <p className="text-xs text-text-secondary mt-0.5">約會安全小提醒</p>
               </div>
             </div>
             <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform text-text-secondary" />
