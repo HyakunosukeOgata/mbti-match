@@ -196,6 +196,12 @@ export default function LoginPage() {
             和
             <a href="/privacy" className="text-primary underline py-3 inline-block">隱私政策</a>
           </p>
+          <button
+            className="mt-3 text-sm font-medium text-primary relative z-10"
+            onClick={() => router.push('/try')}
+          >
+            先不登入，直接跟 AI 聊聊 →
+          </button>
         </>
       )}
 
