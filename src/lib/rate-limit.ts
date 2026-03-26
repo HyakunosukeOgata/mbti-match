@@ -4,6 +4,8 @@
  */
 
 const stores = new Map<string, Map<string, number[]>>();
+let lastCleanup = Date.now();
+const CLEANUP_INTERVAL = 60_000; // cleanup every 60s
 
 export function rateLimit(
   action: string,
@@ -26,10 +28,13 @@ export function rateLimit(
   timestamps.push(now);
   store.set(key, timestamps);
 
-  // Periodic cleanup: remove keys with no recent activity
-  if (store.size > 10000) {
-    for (const [k, v] of store) {
-      if (v.every((t) => t <= cutoff)) store.delete(k);
+  // Periodic cleanup across all stores
+  if (now - lastCleanup > CLEANUP_INTERVAL) {
+    lastCleanup = now;
+    for (const [, s] of stores) {
+      for (const [k, v] of s) {
+        if (v.every((t) => t <= cutoff)) s.delete(k);
+      }
     }
   }
 

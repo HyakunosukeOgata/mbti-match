@@ -59,7 +59,7 @@ async function buildCards(adminClient: ReturnType<typeof createServerClient>, au
     adminClient.from('likes').select('to_user_id').eq('from_user_id', meRow.id),
     adminClient.from('likes').select('from_user_id').eq('to_user_id', meRow.id),
     adminClient.from('matches').select('user1_id, user2_id').or(`user1_id.eq.${meRow.id},user2_id.eq.${meRow.id}`).neq('status', 'removed'),
-    adminClient.from('users').select('*').eq('onboarding_complete', true).eq('profile_visible', true).neq('id', meRow.id),
+    adminClient.from('users').select('*').eq('onboarding_complete', true).eq('profile_visible', true).neq('id', meRow.id).limit(500),
     adminClient.from('daily_cards').select('target_user_id').eq('card_date', today),
     adminClient.from('daily_cards').select('target_user_id').eq('user_id', meRow.id),
   ]);
@@ -77,6 +77,7 @@ async function buildCards(adminClient: ReturnType<typeof createServerClient>, au
     ...(seenRes.data || []).map((row) => row.target_user_id),
     ...matchedIds,
   ];
+  const excludeSet = new Set(excludeIds);
 
   const candidateRows = (candidatesRes.data || []) as DbUserRow[];
   const candidateProfiles = await loadProfilesByDbIds(adminClient, candidateRows.map((row) => row.id));
@@ -95,7 +96,7 @@ async function buildCards(adminClient: ReturnType<typeof createServerClient>, au
     .map((row) => candidateProfiles.get(row.id))
     .filter((profile): profile is NonNullable<typeof profile> => !!profile)
     .filter((profile) => passesBasicFilters(meProfile, profile))
-    .filter((profile) => !excludeIds.includes(profile.id))
+    .filter((profile) => !excludeSet.has(profile.id) && !excludeSet.has(profile.dbId || ''))
     .filter((profile) => {
       const sourceRow = candidateRowsByDbId.get(profile.dbId || profile.id);
       if (sourceRow?.auth_id == null) {
@@ -110,7 +111,7 @@ async function buildCards(adminClient: ReturnType<typeof createServerClient>, au
     .map((row) => candidateProfiles.get(row.id))
     .filter((profile): profile is NonNullable<typeof profile> => !!profile)
     .filter((profile) => passesBasicFilters(meProfile, profile))
-    .filter((profile) => !excludeIds.includes(profile.id))
+    .filter((profile) => !excludeSet.has(profile.id) && !excludeSet.has(profile.dbId || ''))
     .sort((a, b) => calculateCompatibility(meProfile, b) - calculateCompatibility(meProfile, a));
 
   const topMatches = getDailyMatches(
@@ -118,7 +119,7 @@ async function buildCards(adminClient: ReturnType<typeof createServerClient>, au
     candidateRows
       .map((row) => candidateProfiles.get(row.id))
       .filter((profile): profile is NonNullable<typeof profile> => !!profile),
-    excludeIds.map((id) => candidateProfiles.get(id)?.id || id),
+    [...excludeSet].map((id) => candidateProfiles.get(id)?.id || id),
     exposureCounts
   );
   const mergedMatches = [...prioritizedIncomingProfiles, ...topMatches]
@@ -144,6 +145,12 @@ async function buildCards(adminClient: ReturnType<typeof createServerClient>, au
     for (const rc of (reverseCards || []) as { user_id: string; topic_id: string; topic_text: string }[]) {
       existingPairCards.set(rc.user_id, { topic_id: rc.topic_id, topic_text: rc.topic_text });
     }
+  }
+
+  // Re-check: another concurrent request may have already built cards
+  const preCheck = await loadCardsForUser(adminClient, meRow.id);
+  if (preCheck.length > 0) {
+    return { cards: preCheck };
   }
 
   await adminClient.from('daily_cards').delete().eq('user_id', meRow.id).eq('card_date', today);

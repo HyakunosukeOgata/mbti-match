@@ -4,7 +4,7 @@ import { useApp } from '@/lib/store';
 import { getMessagePreview } from '@/lib/chat-message';
 import { getCompatibilityInsight } from '@/lib/matching';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import BottomNav from '@/components/BottomNav';
 import PhotoGallery from '@/components/PhotoGallery';
 import { MessageCircle, Sparkles, Flame } from 'lucide-react';
@@ -76,6 +76,18 @@ export default function MatchesPage() {
     return !expiry.expired;
   });
 
+  // Precompute insights for matches without messages (need "破冰提示")
+  const insightHints = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of activeMatches) {
+      if (m.messages.length === 0 && m.otherUser && currentUser) {
+        const insight = getCompatibilityInsight(currentUser, m.otherUser);
+        if (insight.starters[0]) map.set(m.id, insight.starters[0]);
+      }
+    }
+    return map;
+  }, [activeMatches, currentUser]);
+
   return (
     <div className="min-h-dvh pb-24">
       <div className="px-6 pt-6 pb-4">
@@ -119,7 +131,6 @@ export default function MatchesPage() {
           const unread = match.messages.some((message) => message.senderId !== currentUser.id && !message.readAt);
           const compat = match.compatibility || 0;
           const expiry = getExpiryInfo(match.createdAt, match.messages.length > 0);
-          const insight = getCompatibilityInsight(currentUser, otherUser);
 
           return (
             <Link
@@ -151,7 +162,7 @@ export default function MatchesPage() {
                 </p>
                 {!lastMsg && (
                   <p className="text-[11px] text-text-secondary truncate mt-1">
-                    破冰提示：{insight.starters[0]}
+                    破冰提示：{insightHints.get(match.id) || '從今天的話題開始聊吧'}
                   </p>
                 )}
               </div>
