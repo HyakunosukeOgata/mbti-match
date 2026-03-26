@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { createServerClient } from '@/lib/supabase-server';
+import { rateLimit } from '@/lib/rate-limit';
 import { loadProfilesByDbIds, mapDailyCardRow, mapMatchRow, type DbDailyCardRow, type DbLikeRow, type DbMatchRow, type DbMessageRow } from '@/lib/social';
 import type { DailyCard, LikeAction, Match, UserProfile } from '@/lib/types';
 
@@ -44,6 +45,12 @@ function isAuthorized(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const rl = rateLimit('admin-auth', ip, 10, 3600_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: '請求太頻繁' }, { status: 429 });
+  }
+
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: '未授權' }, { status: 401 });
   }
@@ -158,6 +165,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const rl = rateLimit('admin-auth', ip, 10, 3600_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: '請求太頻繁' }, { status: 429 });
+  }
+
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: '未授權' }, { status: 401 });
   }

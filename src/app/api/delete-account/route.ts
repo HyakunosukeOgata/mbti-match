@@ -28,12 +28,8 @@ export async function POST(req: NextRequest) {
     .eq('auth_id', user.id)
     .maybeSingle();
 
-  // Delete the auth user FIRST — if this fails, data remains intact
-  const { error: deleteError } = await adminClient.auth.admin.deleteUser(user.id);
-  if (deleteError) {
-    return NextResponse.json({ error: '刪除失敗' }, { status: 500 });
-  }
-
+  // Delete profile data FIRST, then auth user LAST
+  // This ensures no orphaned data if auth deletion succeeds but data deletion fails
   if (profile?.id) {
     await adminClient.from('likes').delete().eq('from_user_id', profile.id);
     await adminClient.from('likes').delete().eq('to_user_id', profile.id);
@@ -52,7 +48,7 @@ export async function POST(req: NextRequest) {
     await adminClient.from('photo_consents').delete().eq('requester_id', profile.id);
   }
 
-  // Delete user data from `users` table
+  // Delete user row from `users` table
   await adminClient.from('users').delete().eq('auth_id', user.id);
 
   // Delete user photos from storage
@@ -63,6 +59,12 @@ export async function POST(req: NextRequest) {
     await adminClient.storage
       .from('user-photos')
       .remove(photos.map(p => `${user.id}/${p.name}`));
+  }
+
+  // Delete auth user LAST — only after all data is cleaned up
+  const { error: deleteError } = await adminClient.auth.admin.deleteUser(user.id);
+  if (deleteError) {
+    return NextResponse.json({ error: '刪除失敗' }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

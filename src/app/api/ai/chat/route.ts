@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit } from '@/lib/rate-limit';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -192,6 +193,16 @@ async function callGemini(
 }
 
 export async function POST(request: NextRequest) {
+  // IP-based rate limit (shared by guest /try and authenticated onboarding)
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const rl = rateLimit('ai-chat', ip, 15, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: '請求太頻繁，請稍後再試' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } },
+    );
+  }
+
   try {
     const body = await request.json();
     const { messages, action } = body as {

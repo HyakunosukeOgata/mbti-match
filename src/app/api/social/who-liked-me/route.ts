@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase-server';
 import { getAuthenticatedUser } from '@/lib/server-auth';
 import { loadProfilesByDbIds } from '@/lib/social';
+import { rateLimit } from '@/lib/rate-limit';
 
 export async function GET(req: NextRequest) {
   const authUser = await getAuthenticatedUser(req);
   if (!authUser) {
     return NextResponse.json({ error: '未授權' }, { status: 401 });
+  }
+
+  const rl = rateLimit('who-liked-me', authUser.id, 15, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: '請求太頻繁' }, { status: 429 });
   }
 
   const adminClient = createServerClient();

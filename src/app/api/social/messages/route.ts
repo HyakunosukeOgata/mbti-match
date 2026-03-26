@@ -146,9 +146,9 @@ export async function POST(req: NextRequest) {
   const otherUserId = matchRow.user1_id === currentUserRow.id ? matchRow.user2_id : matchRow.user1_id;
   const { data: otherUserRow } = await adminClient
     .from('users')
-    .select('id, auth_id, name, email')
+    .select('id, auth_id, name')
     .eq('id', otherUserId)
-    .maybeSingle<Pick<DbUserRow, 'id' | 'auth_id' | 'name' | 'email'>>();
+    .maybeSingle<Pick<DbUserRow, 'id' | 'auth_id' | 'name'>>();
 
   await adminClient.from('notifications').insert({
     user_id: otherUserId,
