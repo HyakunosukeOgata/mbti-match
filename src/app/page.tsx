@@ -26,21 +26,7 @@ export default function LoginPage() {
     if (isLoggedIn && currentUser?.onboardingComplete) {
       router.replace('/home');
     } else if (isLoggedIn && onboardingStep >= 1) {
-      // If returning from /try with saved personality, skip AI chat
-      try {
-        const saved = localStorage.getItem('mochi_try_chat');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed.result) {
-            router.replace('/onboarding/profile');
-            return;
-          }
-        }
-      } catch { /* ignore */ }
       router.replace('/onboarding/ai-chat');
-    } else if (!isLoggedIn) {
-      // Not logged in → go to AI chat first
-      router.replace('/try');
     } else {
       track('page_view', { page: 'login' });
     }

@@ -55,51 +55,8 @@ export default function AIOnboardingChatPage() {
     if (!authReady) return;
     if (!currentUser) {
       router.replace('/');
-      return;
     }
-
-    // Check if /try page already generated a personality result
-    try {
-      const tryData = localStorage.getItem('mochi_try_chat');
-      if (tryData) {
-        const parsed = JSON.parse(tryData);
-        if (parsed.result) {
-          const r = parsed.result;
-          const sf = {
-            attachmentStyle: r.attachmentStyle || 'mixed',
-            socialEnergy: typeof r.socialEnergy === 'number' ? r.socialEnergy : 50,
-            conflictStyle: r.conflictStyle || 'collaborator',
-            loveLanguage: r.loveLanguage || '',
-            lifePace: r.lifePace || 'moderate',
-            emotionalDepth: typeof r.emotionalDepth === 'number' ? r.emotionalDepth : 50,
-          };
-          const savedName = parsed.name ? String(parsed.name) : undefined;
-          updateProfile({
-            ...(savedName ? { name: savedName } : {}),
-            aiPersonality: {
-              bio: String(r.bio || ''),
-              traits: Array.isArray(r.traits) ? r.traits : [],
-              values: Array.isArray(r.values) ? r.values : [],
-              datingStyle: String(r.datingStyle || ''),
-              communicationStyle: String(r.communicationStyle || ''),
-              relationshipGoal: String(r.relationshipGoal || ''),
-              redFlags: Array.isArray(r.redFlags) ? r.redFlags : [],
-              tags: Array.isArray(r.tags) ? r.tags : [],
-              scoringFeatures: sf,
-              chatSummary: '',
-              analyzedAt: new Date().toISOString(),
-            },
-            bio: String(r.bio || ''),
-          }).then(() => {
-            localStorage.removeItem('mochi_try_chat');
-            setOnboardingStep(3);
-            router.replace('/onboarding/profile');
-          });
-          return;
-        }
-      }
-    } catch { /* ignore */ }
-  }, [authReady, currentUser, router, updateProfile, setOnboardingStep]);
+  }, [authReady, currentUser, router]);
 
   // Get initial AI greeting
   useEffect(() => {

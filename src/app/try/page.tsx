@@ -2,9 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, Sparkles, Loader2, Heart, ArrowRight } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { signInAnonymously } from '@/lib/auth';
-import { useApp } from '@/lib/store';
+import Link from 'next/link';
 
 interface ChatMsg {
   role: 'user' | 'assistant';
@@ -12,81 +10,6 @@ interface ChatMsg {
 }
 
 const STORAGE_KEY = 'mochi_try_chat';
-
-function ContinueWithName({ onRestart }: { onRestart: () => void }) {
-  const [name, setName] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleContinue = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) { setError('請輸入你的名字'); return; }
-    if (trimmed.length > 20) { setError('名字最多 20 個字'); return; }
-    setLoading(true);
-    setError('');
-    try {
-      // Save name alongside personality result
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        parsed.name = trimmed;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
-      }
-      // Create anonymous account silently
-      const { error: authError } = await signInAnonymously();
-      if (authError) {
-        setError('建立帳號時發生錯誤，請再試一次');
-        setLoading(false);
-        return;
-      }
-      // Auth state change will trigger redirect via useEffect
-    } catch {
-      setError('發生錯誤，請再試一次');
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="mt-6 space-y-4">
-      <div className="text-center">
-        <p className="text-sm font-semibold mb-1">喜歡你的檔案？</p>
-        <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>輸入名字就能繼續，個性檔案會自動帶入</p>
-      </div>
-
-      <div className="rounded-2xl p-5 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-        <input
-          type="text"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') handleContinue(); }}
-          placeholder="你的名字"
-          className="w-full px-4 py-3 rounded-2xl text-sm outline-none"
-          style={{ border: '1px solid var(--border)', background: 'var(--bg-input)' }}
-          autoComplete="name"
-          maxLength={20}
-        />
-        <button
-          className="w-full py-3 rounded-2xl text-white font-semibold flex items-center justify-center gap-2"
-          style={{ background: 'linear-gradient(135deg, #FF8C6B, #FF6B8A)' }}
-          onClick={handleContinue}
-          disabled={loading}
-        >
-          {loading ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-          繼續
-        </button>
-        {error && <p className="text-xs text-center" style={{ color: 'var(--danger)' }}>{error}</p>}
-      </div>
-
-      <button onClick={onRestart} className="w-full py-3 rounded-2xl text-sm font-medium" style={{ color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>
-        重新聊一次
-      </button>
-
-      <p className="text-[11px] text-center" style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
-        繼續即表示你同意我們的<a href="/terms" className="text-primary underline">服務條款</a>和<a href="/privacy" className="text-primary underline">隱私政策</a>
-      </p>
-    </div>
-  );
-}
 
 function loadSaved(): { messages: ChatMsg[]; readyToAnalyze: boolean; result: Record<string, unknown> | null } | null {
   try {
@@ -105,8 +28,6 @@ function saveState(messages: ChatMsg[], readyToAnalyze: boolean, result: Record<
 }
 
 export default function TryPage() {
-  const { isLoggedIn, authReady, currentUser } = useApp();
-  const router = useRouter();
   const saved = useRef(loadSaved());
   const [messages, setMessages] = useState<ChatMsg[]>(saved.current?.messages || []);
   const [input, setInput] = useState('');
@@ -117,19 +38,6 @@ export default function TryPage() {
   const [result, setResult] = useState<Record<string, unknown> | null>(saved.current?.result || null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // If user just authenticated, redirect to onboarding (/ will route them)
-  useEffect(() => {
-    if (!authReady) return;
-    if (isLoggedIn) {
-      // Logged in user with saved /try result → go to onboarding
-      if (currentUser?.onboardingComplete) {
-        router.replace('/home');
-      } else {
-        router.replace('/');
-      }
-    }
-  }, [authReady, isLoggedIn, currentUser, router]);
 
   const userMessageCount = messages.filter(m => m.role === 'user').length;
 
@@ -381,8 +289,19 @@ export default function TryPage() {
             </div>
           )}
 
-          {/* CTA — Inline Registration */}
-          <ContinueWithName onRestart={restart} />
+          {/* CTA */}
+          <div className="mt-6 space-y-3">
+            <Link href="/" className="block">
+              <button className="w-full py-3.5 rounded-2xl text-white font-semibold flex items-center justify-center gap-2" style={{ background: 'linear-gradient(135deg, #FF8C6B, #FF6B8A)' }}>
+                <Heart size={18} />
+                註冊 Mochi，開始配對
+                <ArrowRight size={16} />
+              </button>
+            </Link>
+            <button onClick={restart} className="w-full py-3 rounded-2xl text-sm font-medium" style={{ color: 'var(--text-secondary)', background: 'var(--bg-input)' }}>
+              重新聊一次
+            </button>
+          </div>
         </div>
       </div>
     );
