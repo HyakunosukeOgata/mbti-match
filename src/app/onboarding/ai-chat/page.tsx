@@ -181,7 +181,7 @@ export default function AIOnboardingChatPage() {
 
         setOnboardingStep(3);
         try { localStorage.removeItem(CHAT_STORAGE_KEY); } catch { /* ignore */ }
-        router.push('/onboarding/profile');
+        router.push('/personality');
       } else {
         setError('分析失敗，請再試一次');
       }
@@ -220,10 +220,10 @@ export default function AIOnboardingChatPage() {
       {/* Header */}
       <div className="px-6 pt-6 pb-3">
         <div className="flex justify-between items-center mb-3">
-          <p className="text-sm font-medium text-text-secondary">💬 步驟 2/3 · 聊聊天</p>
+          <p className="text-sm font-medium text-text-secondary">💬 步驟 2/4 · 聊聊天</p>
         </div>
         <div className="progress-bar">
-          <div className="progress-bar-fill" style={{ width: readyToAnalyze ? '66%' : `${33 + Math.min(userMessageCount * 4, 28)}%` }} />
+          <div className="progress-bar-fill" style={{ width: readyToAnalyze ? '50%' : `${25 + Math.min(userMessageCount * 3, 25)}%` }} />
         </div>
         <p className="text-xs text-text-secondary mt-2">
           {readyToAnalyze

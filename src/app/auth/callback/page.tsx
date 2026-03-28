@@ -36,7 +36,7 @@ function CallbackHandler() {
       router.replace('/');
       return;
     }
-    router.replace(currentUser.onboardingComplete ? '/home' : '/onboarding/ai-chat');
+    router.replace(currentUser.onboardingComplete ? '/home' : currentUser.aiPersonality ? '/personality' : '/onboarding/ai-chat');
   }, [exchangeDone, authReady, authError, currentUser, router]);
 
   return (

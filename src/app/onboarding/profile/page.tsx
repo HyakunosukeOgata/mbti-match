@@ -237,7 +237,7 @@ export default function ProfilePage() {
       {/* Progress */}
       <div className="mb-6">
         <div className="flex justify-between items-center mb-3">
-          <p className="text-sm font-medium text-text-secondary">👤 步驟 3/3 · 個人資料</p>
+          <p className="text-sm font-medium text-text-secondary">👤 步驟 4/4 · 個人資料</p>
         </div>
         <div className="progress-bar">
           <div className="progress-bar-fill" style={{ width: '100%' }} />

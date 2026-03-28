@@ -62,7 +62,7 @@ export default function MatchesPage() {
     if (!currentUser) {
       router.replace('/');
     } else if (!currentUser.onboardingComplete) {
-      router.replace('/onboarding/ai-chat');
+      router.replace(currentUser.aiPersonality ? '/personality' : '/onboarding/ai-chat');
     } else {
       track('page_view', { page: 'matches' });
     }

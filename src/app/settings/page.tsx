@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import BottomNav from '@/components/BottomNav';
 import React from 'react';
-import { LogOut, Sliders, Shield, ChevronRight, Camera, Trash2, Eye, RefreshCw, ShieldOff, Heart, Bell } from 'lucide-react';
+import { LogOut, Sliders, Shield, ChevronRight, Camera, Trash2, Eye, RefreshCw, ShieldOff, Heart, Bell, Sparkles } from 'lucide-react';
 import { track } from '@/lib/analytics';
 import { moderateBio, moderateName } from '@/lib/moderation';
 import { TAIWAN_CITIES } from '@/lib/types';
@@ -35,7 +35,7 @@ export default function SettingsPage() {
     if (!currentUser) {
       router.replace('/');
     } else if (!currentUser.onboardingComplete) {
-      router.replace('/onboarding/ai-chat');
+      router.replace(currentUser.aiPersonality ? '/personality' : '/onboarding/ai-chat');
     } else {
       track('page_view', { page: 'settings' });
     }
@@ -316,6 +316,26 @@ export default function SettingsPage() {
             </div>
           </div>
         </button>
+
+        {currentUser.aiPersonality && (
+          <button
+            className="card w-full text-left group"
+            onClick={() => router.push('/personality')}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255, 140, 107, 0.08)' }}>
+                  <Sparkles size={15} className="text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-bold">✨ 我的默契檔案</h3>
+                  <p className="text-xs text-text-secondary mt-0.5">查看 AI 分析的人格結果與關係風格</p>
+                </div>
+              </div>
+              <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform text-text-secondary" />
+            </div>
+          </button>
+        )}
 
         <button
           className="card w-full text-left group"

@@ -40,7 +40,7 @@ export default function HomePage() {
       return;
     }
     if (!currentUser.onboardingComplete) {
-      router.replace('/onboarding/ai-chat');
+      router.replace(currentUser.aiPersonality ? '/personality' : '/onboarding/ai-chat');
       return;
     }
     track('page_view', { page: 'home' });
