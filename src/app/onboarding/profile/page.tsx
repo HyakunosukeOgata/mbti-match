@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import React from 'react';
 import { ArrowRight, Camera } from 'lucide-react';
 import { track } from '@/lib/analytics';
-import { moderateBio, moderateName } from '@/lib/moderation';
+import { moderateName } from '@/lib/moderation';
 import { TAIWAN_CITIES } from '@/lib/types';
 import { compressImage } from '@/lib/compressImage';
 
@@ -15,7 +15,6 @@ export default function ProfilePage() {
   const router = useRouter();
 
   const [photos, setPhotos] = useState<string[]>(currentUser?.photos || []);
-  const [bio, setBio] = useState(currentUser?.bio || '');
   const [nickname, setNickname] = useState('');
   const [birthYear, setBirthYear] = useState<number | ''>('');
   const [birthMonth, setBirthMonth] = useState<number | ''>('');
@@ -24,7 +23,6 @@ export default function ProfilePage() {
   const [ageError, setAgeError] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | 'other'>(currentUser?.gender || 'other');
   const [region, setRegion] = useState(currentUser?.preferences.region || '');
-  const [bioError, setBioError] = useState('');
   const [nameError, setNameError] = useState('');
   const [photoError, setPhotoError] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
@@ -149,23 +147,41 @@ export default function ProfilePage() {
         return;
       }
     }
-    if (bio.trim()) {
-      const check = moderateBio(bio);
-      if (!check.allowed) {
-        setBioError(check.reason || '內容不符合規範');
-        setTimeout(() => setBioError(''), 3000);
-        return;
-      }
-    }
     const validAge = Math.max(18, Math.min(60, age));
     const validAgeMin = Math.max(18, Math.min(60, ageMin));
     const validAgeMax = Math.max(validAgeMin, Math.min(60, ageMax));
     setSaving(true);
     try {
+      let generatedBio = currentUser.aiPersonality?.bio || currentUser.bio || '';
+      if (currentUser.aiPersonality) {
+        try {
+          const res = await fetch('/api/ai/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'profile-bio',
+              profile: {
+                name: trimmedNickname || currentUser.name,
+                age: validAge,
+                gender,
+                region,
+              },
+              personality: currentUser.aiPersonality,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.bio) generatedBio = String(data.bio).trim();
+          }
+        } catch {
+          // Fall back to the personality summary if final bio generation fails.
+        }
+      }
+
       await updateProfile({
         name: nickname.trim() || currentUser.name,
         photos,
-        bio,
+        bio: generatedBio,
         age: validAge,
         gender,
         preferences: {
@@ -374,18 +390,16 @@ export default function ProfilePage() {
           </select>
         </div>
 
-        <div>
-          <label className="text-sm font-medium text-text-secondary mb-2 block">✍️ 自我介紹</label>
-          <textarea
-            value={bio}
-            onChange={(e) => setBio(e.target.value)}
-            placeholder="說說你自己吧！興趣、個性、對生活的態度...讓別人更認識你 💜"
-            rows={4}
-            maxLength={500}
-            className="resize-none"
-          />
-          {bioError && (
-            <p className="text-red-500 text-xs mt-1">{bioError}</p>
+        <div className="card !border-none" style={{ background: 'linear-gradient(135deg, rgba(255, 140, 107, 0.06), rgba(255, 107, 107, 0.04))' }}>
+          <p className="text-sm font-medium text-text-secondary mb-2">✍️ 自我介紹會在下一步自動生成</p>
+          <p className="text-sm text-text-secondary leading-relaxed">
+            小默會把你剛剛的聊天內容，和你填的名字、性別、年齡與地區一起整理成正式自介。
+          </p>
+          {currentUser.aiPersonality?.bio && (
+            <div className="mt-3 rounded-2xl p-3" style={{ background: 'rgba(255,255,255,0.55)' }}>
+              <p className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1">目前人格摘要</p>
+              <p className="text-sm leading-relaxed">{currentUser.aiPersonality.bio}</p>
+            </div>
           )}
         </div>
 
@@ -478,9 +492,9 @@ export default function ProfilePage() {
         <button
           className="btn-primary flex items-center justify-center gap-2"
           onClick={handleComplete}
-          disabled={saving || !bio.trim() || photos.length === 0 || !isBirthdateComplete || !!ageError || !region}
+          disabled={saving || photos.length === 0 || !isBirthdateComplete || !!ageError || !region}
         >
-          {saving ? '儲存中...' : '完成設定，開始配對！🚀'}
+          {saving ? '正在生成自介...' : '完成設定，開始配對！🚀'}
         </button>
       </div>
     </div>

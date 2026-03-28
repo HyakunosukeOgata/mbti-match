@@ -176,7 +176,6 @@ export default function AIOnboardingChatPage() {
             chatSummary: p.chatSummary || '',
             analyzedAt: new Date().toISOString(),
           },
-          bio: p.bio || currentUser?.bio || '',
         });
 
         setOnboardingStep(3);
