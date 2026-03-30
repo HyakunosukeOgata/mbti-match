@@ -78,6 +78,12 @@ export default function PersonalityPage() {
             </div>
             <p className="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Mochi 默契檔案</p>
             <h1 className="text-2xl font-bold mb-2">{currentUser.name || '你'}在關係裡的樣子</h1>
+            {(currentUser.occupation || currentUser.education) && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {currentUser.occupation ? <span className="pill text-xs">{currentUser.occupation}</span> : null}
+                {currentUser.education ? <span className="pill text-xs">{currentUser.education}</span> : null}
+              </div>
+            )}
             <p className="text-sm text-text-secondary leading-relaxed">{personality.bio}</p>
             {isOnboardingFlow && (
               <p className="text-xs text-text-secondary mt-3">這是你的正式公開檔案，接下來首頁推薦與配對理由都會以這份資料為基礎。</p>

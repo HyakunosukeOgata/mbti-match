@@ -37,6 +37,8 @@ export interface UserProfile {
   id: string;
   dbId?: string;
   name: string;
+  occupation?: string;
+  education?: string;
   age: number;
   hideAge?: boolean;
   profileVisible?: boolean;

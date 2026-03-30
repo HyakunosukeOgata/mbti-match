@@ -283,6 +283,8 @@ export default function AdminPage() {
           <DetailItem label="ID" value={user.id} mono />
           <DetailItem label="性別" value={genderLabel(user.gender)} />
           <DetailItem label="年齡" value={`${user.age}歲`} />
+          <DetailItem label="職業" value={user.occupation || '—'} />
+          <DetailItem label="學歷" value={user.education || '—'} />
           <DetailItem label="地區" value={user.preferences.region} />
           <DetailItem label="Onboarding" value={user.onboardingComplete ? '✅ 完成' : '⏳ 未完成'} />
           <DetailItem label="註冊時間" value={user.createdAt} />

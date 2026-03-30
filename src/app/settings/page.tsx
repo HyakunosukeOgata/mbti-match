@@ -21,6 +21,8 @@ export default function SettingsPage() {
   const [photos, setPhotos] = useState<string[]>(currentUser?.photos || []);
   const [bio, setBio] = useState(currentUser?.bio || '');
   const [editName, setEditName] = useState(currentUser?.name || '');
+  const [editOccupation, setEditOccupation] = useState(currentUser?.occupation || '');
+  const [editEducation, setEditEducation] = useState(currentUser?.education || '');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState('');
@@ -95,6 +97,8 @@ export default function SettingsPage() {
     try {
       await updateProfile({
         name: trimmedName,
+        occupation: editOccupation.trim(),
+        education: editEducation.trim(),
         photos,
         bio,
       });
@@ -115,6 +119,8 @@ export default function SettingsPage() {
     setPhotos(currentUser.photos || []);
     setBio(currentUser.bio || '');
     setEditName(currentUser.name || '');
+    setEditOccupation(currentUser.occupation || '');
+    setEditEducation(currentUser.education || '');
     setProfileVisible(currentUser.profileVisible ?? true);
     setHideAge(currentUser.hideAge ?? false);
   }, [currentUser]);
@@ -161,6 +167,11 @@ export default function SettingsPage() {
             )}
             <div className="flex-1 min-w-0">
               <p className="font-bold text-lg truncate">{currentUser.name}</p>
+              {(currentUser.occupation || currentUser.education) && (
+                <p className="text-xs text-text-secondary mt-1 truncate">
+                  {[currentUser.occupation, currentUser.education].filter(Boolean).join(' · ')}
+                </p>
+              )}
               <div className="flex items-center gap-2 mt-1.5">
                 <span className="text-sm text-text-secondary">{currentUser.age}歲</span>
                 {currentUser.aiPersonality?.values.slice(0, 2).map((v, i) => (
@@ -208,6 +219,28 @@ export default function SettingsPage() {
                   placeholder="你的暱稱"
                 />
                 <p className="text-xs text-text-secondary/50 mt-1 text-right">{editName.length}/20</p>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-text-secondary mb-1.5 block uppercase tracking-wider">職業</label>
+                  <input
+                    type="text"
+                    value={editOccupation}
+                    onChange={(e) => setEditOccupation(e.target.value)}
+                    maxLength={40}
+                    placeholder="例如：產品設計師"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-text-secondary mb-1.5 block uppercase tracking-wider">學歷</label>
+                  <input
+                    type="text"
+                    value={editEducation}
+                    onChange={(e) => setEditEducation(e.target.value)}
+                    maxLength={60}
+                    placeholder="例如：大學畢業、碩士在學"
+                  />
+                </div>
               </div>
               {/* Non-editable fields */}
               <div className="flex gap-3">
@@ -272,7 +305,7 @@ export default function SettingsPage() {
                 <p className="text-xs text-text-secondary/50 mt-1 text-right">{bio.length}/500</p>
               </div>
               <div className="flex gap-3 pt-1">
-                <button className="btn-secondary flex-1 text-sm" onClick={() => { setPhotos(currentUser.photos); setBio(currentUser.bio); setEditName(currentUser.name); setEditMode(false); }}>
+                <button className="btn-secondary flex-1 text-sm" onClick={() => { setPhotos(currentUser.photos); setBio(currentUser.bio); setEditName(currentUser.name); setEditOccupation(currentUser.occupation || ''); setEditEducation(currentUser.education || ''); setEditMode(false); }}>
                   取消
                 </button>
                 <button className="btn-primary flex-1 text-sm" onClick={handleSave} disabled={savingProfile}>

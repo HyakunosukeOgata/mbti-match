@@ -105,11 +105,15 @@ export interface DbNotificationRow {
 
 export function mapDbUserToProfile(row: DbUserRow, photos: string[] = []): UserProfile {
   const preferences = (row.preferences || {}) as JsonObject;
+  const occupation = typeof preferences.occupation === 'string' ? preferences.occupation : '';
+  const education = typeof preferences.education === 'string' ? preferences.education : '';
 
   return {
     id: row.auth_id || row.id,
     dbId: row.id,
     name: row.name || '',
+    occupation,
+    education,
     age: row.age || 25,
     hideAge: row.hide_age ?? false,
     profileVisible: row.profile_visible ?? true,

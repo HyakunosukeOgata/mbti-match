@@ -41,6 +41,8 @@ const SYSTEM_PROMPT = `你是交友產品 Mochi 默契的 opening coach。
 function buildProfileBrief(label: string, p: UserProfile): string {
   const lines: string[] = [`## ${label}`];
   if (p.name) lines.push(`名稱：${p.name}`);
+  if (p.occupation) lines.push(`職業：${p.occupation}`);
+  if (p.education) lines.push(`學歷：${p.education}`);
   if (p.age) lines.push(`年齡：${p.age}`);
   if (p.preferences?.region) lines.push(`城市：${p.preferences.region}`);
   if (p.aiPersonality?.relationshipGoal) lines.push(`關係期待：${p.aiPersonality.relationshipGoal}`);

@@ -157,6 +157,8 @@ export default function AIOnboardingChatPage() {
           messages,
           profile: {
             nickname: currentUser.name,
+            occupation: currentUser.occupation,
+            education: currentUser.education,
             age: currentUser.age,
             gender: currentUser.gender,
             region: currentUser.preferences.region,

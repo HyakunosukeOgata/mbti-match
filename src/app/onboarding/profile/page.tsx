@@ -16,8 +16,9 @@ export default function ProfilePage() {
   const router = useRouter();
 
   const [photos, setPhotos] = useState<string[]>(currentUser?.photos || []);
-  const [bio, setBio] = useState(currentUser?.bio || '');
   const [nickname, setNickname] = useState('');
+  const [occupation, setOccupation] = useState(currentUser?.occupation || '');
+  const [education, setEducation] = useState(currentUser?.education || '');
   const [birthYear, setBirthYear] = useState<number | ''>('');
   const [birthMonth, setBirthMonth] = useState<number | ''>('');
   const [birthDay, setBirthDay] = useState<number | ''>('');
@@ -25,7 +26,7 @@ export default function ProfilePage() {
   const [ageError, setAgeError] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | 'other'>(currentUser?.gender || 'other');
   const [region, setRegion] = useState(currentUser?.preferences.region || '');
-  const [bioError, setBioError] = useState('');
+  const [formError, setFormError] = useState('');
   const [nameError, setNameError] = useState('');
   const [photoError, setPhotoError] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
@@ -133,19 +134,13 @@ export default function ProfilePage() {
     if (saving || finalizing) return;
 
     const trimmedNickname = nickname.trim();
+    const trimmedOccupation = occupation.trim();
+    const trimmedEducation = education.trim();
     if (trimmedNickname) {
       const nameCheck = moderateName(trimmedNickname);
       if (!nameCheck.allowed) {
         setNameError(nameCheck.reason || '暱稱不符合規範');
         setTimeout(() => setNameError(''), 3000);
-        return;
-      }
-    }
-    if (bio.trim()) {
-      const check = moderateBio(bio);
-      if (!check.allowed) {
-        setBioError(check.reason || '內容不符合規範');
-        setTimeout(() => setBioError(''), 3000);
         return;
       }
     }
@@ -167,8 +162,8 @@ export default function ProfilePage() {
         : [];
 
     if (finalMessages.length === 0) {
-      setBioError('請先完成和 AI 的對話，再建立正式檔案');
-      setTimeout(() => setBioError(''), 3000);
+      setFormError('請先完成和 AI 的對話，再建立正式檔案');
+      setTimeout(() => setFormError(''), 3000);
       return;
     }
 
@@ -182,11 +177,13 @@ export default function ProfilePage() {
           action: 'finalize',
           messages: finalMessages,
           profile: {
-            nickname: nickname.trim() || currentUser.name,
+            nickname: trimmedNickname || currentUser.name,
+            occupation: trimmedOccupation,
+            education: trimmedEducation,
             age: validAge,
             gender,
             region,
-            bio,
+            bio: currentUser.bio || '',
             ageMin: validAgeMin,
             ageMax: validAgeMax,
             genderPreference: genderPref,
@@ -201,9 +198,11 @@ export default function ProfilePage() {
       }
 
       await updateProfile({
-        name: nickname.trim() || currentUser.name,
+        name: trimmedNickname || currentUser.name,
+        occupation: trimmedOccupation,
+        education: trimmedEducation,
         photos,
-        bio: data.personality.bio || bio,
+        bio: data.personality.bio || currentUser.bio || '',
         age: validAge,
         gender,
         aiPersonality: {
@@ -305,6 +304,7 @@ export default function ProfilePage() {
         <div className="progress-bar">
           <div className="progress-bar-fill" style={{ width: '75%' }} />
         </div>
+        <p className="text-xs text-text-secondary mt-2">這一步只補基本資料，像職業、學歷這類結構化資訊；公開自介會交給前面的 AI 對話來整理。</p>
       </div>
 
       <div className="flex-1 space-y-6 overflow-y-auto pb-20">
@@ -359,6 +359,30 @@ export default function ProfilePage() {
           {nameError && (
             <p className="text-red-500 text-xs mt-1">{nameError}</p>
           )}
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-text-secondary mb-2 block">💼 職業</label>
+          <input
+            type="text"
+            value={occupation}
+            onChange={(e) => setOccupation(e.target.value)}
+            placeholder="例如：產品設計師、研究助理、自由接案"
+            maxLength={40}
+          />
+          <p className="text-xs text-text-secondary mt-1 opacity-60">選填，讓配對與自介更完整</p>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-text-secondary mb-2 block">🎓 學歷</label>
+          <input
+            type="text"
+            value={education}
+            onChange={(e) => setEducation(e.target.value)}
+            placeholder="例如：台大社會系、碩士在學、大學畢業"
+            maxLength={60}
+          />
+          <p className="text-xs text-text-secondary mt-1 opacity-60">選填，填你想公開的程度就好</p>
         </div>
 
         <div>
@@ -427,21 +451,6 @@ export default function ProfilePage() {
               <option key={r} value={r}>{r}</option>
             ))}
           </select>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium text-text-secondary mb-2 block">✍️ 自我介紹</label>
-          <textarea
-            value={bio}
-            onChange={(e) => setBio(e.target.value)}
-            placeholder="說說你自己吧！興趣、個性、對生活的態度...讓別人更認識你 💜"
-            rows={4}
-            maxLength={500}
-            className="resize-none"
-          />
-          {bioError && (
-            <p className="text-red-500 text-xs mt-1">{bioError}</p>
-          )}
         </div>
 
         <div className="card !border-none" style={{ background: 'linear-gradient(135deg, rgba(255, 140, 107, 0.04), rgba(255, 107, 107, 0.03))' }}>
@@ -529,11 +538,15 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      {formError && (
+        <p className="text-xs text-danger text-center mt-3">{formError}</p>
+      )}
+
       <div className="pt-4">
         <button
           className="btn-primary flex items-center justify-center gap-2"
           onClick={handleComplete}
-          disabled={saving || !bio.trim() || photos.length === 0 || !isBirthdateComplete || !!ageError || !region}
+          disabled={saving || photos.length === 0 || !isBirthdateComplete || !!ageError || !region}
         >
           {saving ? '儲存中...' : '完成設定，生成我的默契檔案 ✨'}
         </button>
