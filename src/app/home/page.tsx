@@ -262,6 +262,7 @@ export default function HomePage() {
                   <img
                     src={card.user.photos[0]}
                     alt={card.user.name}
+                    loading="lazy"
                     className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
                   />
                 </div>

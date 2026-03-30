@@ -160,8 +160,12 @@ export default function ChatClient({ matchId }: { matchId: string }) {
 
   if (!match || !isMatchMember || !otherUser) {
     return (
-      <div className="min-h-dvh flex flex-col items-center justify-center gap-4">
-        <p className="text-text-secondary">找不到這個對話</p>
+      <div className="min-h-dvh flex flex-col items-center justify-center gap-4 px-6 text-center">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mb-2" style={{ background: 'rgba(255,140,107,0.08)' }}>
+          <Shield size={28} className="text-text-secondary" />
+        </div>
+        <p className="text-text font-semibold">對話已結束</p>
+        <p className="text-text-secondary text-sm">對方可能已離開或配對已過期</p>
         <button className="btn-primary !w-auto !px-8" onClick={() => router.push('/matches')}>返回配對列表</button>
       </div>
     );
@@ -271,7 +275,7 @@ export default function ChatClient({ matchId }: { matchId: string }) {
 
   return (
     <div className="min-h-dvh flex flex-col">
-      <div className="flex items-center gap-3 px-4 py-3" style={{ background: '#FFFFFF', backdropFilter: 'blur(20px)', borderBottom: '1px solid #F2E8E0', paddingTop: 'max(12px, env(safe-area-inset-top, 12px))' }}>
+      <div className="flex items-center gap-3 px-4 py-3" style={{ background: 'var(--bg-card)', backdropFilter: 'blur(20px)', borderBottom: '1px solid var(--border)', paddingTop: 'max(12px, env(safe-area-inset-top, 12px))' }}>
         <button aria-label="返回" onClick={() => router.push('/matches')} className="text-text-secondary hover:text-primary p-2.5 -ml-1 rounded-xl transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
           <ArrowLeft size={22} />
         </button>
@@ -359,7 +363,7 @@ export default function ChatClient({ matchId }: { matchId: string }) {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5" style={{ overscrollBehavior: 'contain', background: '#FFF9F5' }}>
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5" style={{ overscrollBehavior: 'contain', background: 'var(--bg)' }}>
         {/* Topic question + both answers */}
         {match.topic?.text && (
           <div className="mb-4 animate-fade-in">
@@ -386,7 +390,7 @@ export default function ChatClient({ matchId }: { matchId: string }) {
 
         {insight && (
           <div className="mb-4 animate-fade-in">
-            <div className="p-4 rounded-2xl" style={{ background: '#FFFFFF', border: '1px solid rgba(255,140,107,0.12)' }}>
+            <div className="p-4 rounded-2xl" style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,140,107,0.12)' }}>
               <div className="flex items-center gap-2 mb-2">
                 <Sparkles size={14} className="text-primary" />
                 <p className="text-xs font-semibold text-text-secondary">默契速覽</p>
@@ -474,7 +478,7 @@ export default function ChatClient({ matchId }: { matchId: string }) {
         </div>
       )}
 
-      <div className="px-4 pt-3 flex gap-2.5 items-end" style={{ background: '#FFFFFF', borderTop: '1px solid #F2E8E0', paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' }}>
+      <div className="px-4 pt-3 flex gap-2.5 items-end" style={{ background: 'var(--bg-card)', borderTop: '1px solid var(--border)', paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' }}>
         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void handlePickImage(e); }} />
         <button
           aria-label={photoConsentStatus === 'approved' ? '上傳照片' : photoConsentStatus === 'requested' && photoConsentRequester === currentUser.dbId ? '等待對方回應' : '申請照片交換'}
@@ -514,7 +518,7 @@ export default function ChatClient({ matchId }: { matchId: string }) {
           disabled={!input.trim() || sending || uploadingImage}
           className="w-10 h-10 rounded-full flex items-center justify-center transition-all shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
           style={{
-            background: input.trim() ? 'linear-gradient(135deg, #FF8C6B, #FF6B8A)' : '#FFF5EF',
+            background: input.trim() ? 'linear-gradient(135deg, #FF8C6B, #FF6B8A)' : 'var(--bg-input)',
             boxShadow: input.trim() ? '0 3px 10px rgba(255, 140, 107, 0.28)' : 'none',
           }}
         >

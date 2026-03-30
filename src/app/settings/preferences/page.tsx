@@ -117,7 +117,7 @@ export default function PreferencesPage() {
               <input
                 type="number"
                 value={ageMin}
-                onChange={(e) => setAgeMin(Number(e.target.value))}
+                onChange={(e) => setAgeMin(Math.max(18, Math.min(60, Number(e.target.value) || 18)))}
                 min={18}
                 max={60}
                 className="text-center text-lg font-bold"
@@ -129,7 +129,7 @@ export default function PreferencesPage() {
               <input
                 type="number"
                 value={ageMax}
-                onChange={(e) => setAgeMax(Number(e.target.value))}
+                onChange={(e) => setAgeMax(Math.max(18, Math.min(60, Number(e.target.value) || 18)))}
                 min={18}
                 max={60}
                 className="text-center text-lg font-bold"
@@ -141,34 +141,22 @@ export default function PreferencesPage() {
 
         <div>
           <label className="text-sm font-semibold text-text mb-3 block">📍 希望配對的縣市</label>
-          <select
-            multiple
-            value={preferredRegions}
-            onChange={(e) => {
-              const selected = Array.from(e.target.selectedOptions, opt => opt.value);
-              setPreferredRegions(selected);
-            }}
-            className="w-full rounded-xl text-sm"
-            style={{ minHeight: 180, padding: '8px', border: '1.5px solid var(--border)', background: 'var(--bg-input)' }}
-          >
+          <div className="grid grid-cols-4 gap-1.5">
             {TAIWAN_CITIES.map(r => (
-              <option key={r} value={r}>{r}</option>
+              <button
+                key={r}
+                type="button"
+                className={`text-xs py-2.5 px-1 rounded-xl text-center transition-colors ${preferredRegions.includes(r) ? 'bg-primary text-white font-semibold' : 'bg-bg-input text-text-secondary hover:bg-bg-card'}`}
+                onClick={() => setPreferredRegions(prev => prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r])}
+              >
+                {r}
+              </button>
             ))}
-          </select>
+          </div>
           {preferredRegions.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {preferredRegions.map(r => (
-                <span key={r} className="inline-flex items-center gap-1 text-xs py-1 px-2.5 rounded-full font-medium" style={{ background: 'rgba(255,140,107,0.1)', color: 'var(--primary)' }}>
-                  {r}
-                  <button onClick={() => setPreferredRegions(prev => prev.filter(x => x !== r))} className="hover:text-danger">✕</button>
-                </span>
-              ))}
-            </div>
+            <p className="text-xs text-primary mt-2">已選 {preferredRegions.length} 個縣市</p>
           )}
-          {preferredRegions.length > 0 && (
-            <p className="text-xs text-primary mt-1">已選 {preferredRegions.length} 個縣市</p>
-          )}
-          <p className="text-xs text-text-secondary mt-1 opacity-60">按住 Cmd/Ctrl 可複選，不選 = 不限地區</p>
+          <p className="text-xs text-text-secondary mt-1 opacity-60">點擊選取或取消，不選 = 不限地區</p>
         </div>
 
         {/* Info */}

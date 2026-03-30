@@ -77,6 +77,13 @@ export default function ProfilePage() {
     : 31;
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
+  // Reset day if it exceeds current month's max days
+  useEffect(() => {
+    if (birthDay !== '' && birthDay > daysInMonth) {
+      setBirthDay(daysInMonth);
+    }
+  }, [birthDay, daysInMonth]);
+
   useEffect(() => {
     if (!authReady) return;
     if (!currentUser) {

@@ -2,7 +2,7 @@
 
 import { useApp } from '@/lib/store';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import BottomNav from '@/components/BottomNav';
 import { Bell, Eye, Heart, Sparkles } from 'lucide-react';
 import { track } from '@/lib/analytics';
@@ -47,6 +47,9 @@ export default function NotificationsPage() {
   const [viewers, setViewers] = useState<Viewer[]>([]);
   const [loadingLikers, setLoadingLikers] = useState(false);
   const [loadingViewers, setLoadingViewers] = useState(false);
+  const PAGE_SIZE = 20;
+  const [likersPage, setLikersPage] = useState(1);
+  const [viewersPage, setViewersPage] = useState(1);
 
   useEffect(() => {
     if (!authReady || !currentUser?.dbId) return;
@@ -241,8 +244,12 @@ export default function NotificationsPage() {
             </div>
           ) : (
             <div className="space-y-2.5">
-              {likers.map(liker => (
-                <div key={liker.dbId} className="card !p-3.5 flex items-center gap-3">
+              {likers.slice(0, likersPage * PAGE_SIZE).map(liker => (
+                <div
+                  key={liker.dbId}
+                  className="card !p-3.5 flex items-center gap-3 cursor-pointer hover:ring-1 hover:ring-primary/20 transition-all"
+                  onClick={() => router.push('/home')}
+                >
                   <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0" style={{ background: 'var(--bg-input)' }}>
                     {liker.photo ? (
                       <img src={liker.photo} alt={liker.name} className="w-full h-full object-cover" />
@@ -257,9 +264,14 @@ export default function NotificationsPage() {
                     </div>
                     <p className="text-xs text-text-secondary mt-0.5">{formatTime(liker.likedAt)}</p>
                   </div>
-                  <Heart size={16} fill="#FF6B6B" color="#FF6B6B" />
+                  <span className="text-xs text-primary font-medium">去看看 →</span>
                 </div>
               ))}
+              {likers.length > likersPage * PAGE_SIZE && (
+                <button className="btn-secondary text-sm w-full" onClick={() => setLikersPage(p => p + 1)}>
+                  載入更多（{likers.length - likersPage * PAGE_SIZE} 人）
+                </button>
+              )}
             </div>
           )
         )}
@@ -276,7 +288,7 @@ export default function NotificationsPage() {
             </div>
           ) : (
             <div className="space-y-2.5">
-              {viewers.map(viewer => (
+              {viewers.slice(0, viewersPage * PAGE_SIZE).map(viewer => (
                 <div key={viewer.dbId} className="card !p-3.5 flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0" style={{ background: 'var(--bg-input)' }}>
                     {viewer.photo ? (
@@ -294,6 +306,11 @@ export default function NotificationsPage() {
                   <Eye size={16} className="text-text-secondary/40" />
                 </div>
               ))}
+              {viewers.length > viewersPage * PAGE_SIZE && (
+                <button className="btn-secondary text-sm w-full" onClick={() => setViewersPage(p => p + 1)}>
+                  載入更多（{viewers.length - viewersPage * PAGE_SIZE} 人）
+                </button>
+              )}
             </div>
           )
         )}

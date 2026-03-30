@@ -371,12 +371,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const channelC = supabase
       .channel(`likes-${currentUser.dbId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'likes' }, refreshSocial)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'likes', filter: `to_user_id=eq.${currentUser.dbId}` }, refreshSocial)
       .subscribe();
 
     const channelD = supabase
       .channel(`messages-${currentUser.dbId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => { void loadMatches(); })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        const matchIds = matchesRef.current.map(m => m.id);
+        if (matchIds.length === 0 || matchIds.includes((payload.new as { match_id?: string }).match_id || '')) {
+          void loadMatches();
+        }
+      })
       .subscribe();
 
     return () => {
@@ -430,7 +435,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     track('profile_updated');
     const updated: UserProfile = {
-      ...previousUser,
+      ...currentUserRef.current!,
       ...updates,
       dbId: updates.dbId ?? previousUser.dbId,
       preferences: updates.preferences
