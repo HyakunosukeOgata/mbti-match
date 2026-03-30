@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import BottomNav from '@/components/BottomNav';
 import React from 'react';
-import { LogOut, Sliders, Shield, ChevronRight, Camera, Trash2, Eye, RefreshCw, ShieldOff, Heart, Bell, Sparkles } from 'lucide-react';
+import { LogOut, Sliders, Shield, ChevronRight, Camera, Trash2, Eye, RefreshCw } from 'lucide-react';
 import { track } from '@/lib/analytics';
 import { moderateBio, moderateName } from '@/lib/moderation';
 import { TAIWAN_CITIES } from '@/lib/types';
@@ -35,7 +35,7 @@ export default function SettingsPage() {
     if (!currentUser) {
       router.replace('/');
     } else if (!currentUser.onboardingComplete) {
-      router.replace(currentUser.aiPersonality ? '/personality' : '/onboarding/ai-chat');
+      router.replace('/onboarding/ai-chat');
     } else {
       track('page_view', { page: 'settings' });
     }
@@ -69,16 +69,6 @@ export default function SettingsPage() {
 
   const handleRemovePhoto = (idx: number) => {
     setPhotos(prev => prev.filter((_, i) => i !== idx));
-  };
-
-  const handleSetMainPhoto = (idx: number) => {
-    if (idx === 0) return;
-    setPhotos(prev => {
-      const next = [...prev];
-      const [moved] = next.splice(idx, 1);
-      next.unshift(moved);
-      return next;
-    });
   };
 
   const handleSave = async () => {
@@ -243,13 +233,8 @@ export default function SettingsPage() {
                         className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-black/60 text-white text-xs flex items-center justify-center opacity-80 hover:opacity-100 hover:bg-red-500 transition-all"
                         aria-label={`刪除照片 ${idx + 1}`}
                       >✕</button>
-                      {idx === 0 ? (
+                      {idx === 0 && (
                         <span className="absolute bottom-1.5 left-1.5 text-[11px] font-bold text-white bg-black/50 px-2 py-0.5 rounded-full">主照片</span>
-                      ) : (
-                        <button
-                          onClick={() => handleSetMainPhoto(idx)}
-                          className="absolute bottom-1.5 left-1.5 text-[11px] font-medium text-white bg-black/40 hover:bg-primary px-2 py-0.5 rounded-full transition-colors"
-                        >設為主照</button>
                       )}
                     </div>
                   ))}
@@ -317,26 +302,6 @@ export default function SettingsPage() {
           </div>
         </button>
 
-        {currentUser.aiPersonality && (
-          <button
-            className="card w-full text-left group"
-            onClick={() => router.push('/personality')}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255, 140, 107, 0.08)' }}>
-                  <Sparkles size={15} className="text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-bold">✨ 我的默契檔案</h3>
-                  <p className="text-xs text-text-secondary mt-0.5">查看 AI 分析的人格結果與關係風格</p>
-                </div>
-              </div>
-              <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform text-text-secondary" />
-            </div>
-          </button>
-        )}
-
         <button
           className="card w-full text-left group"
           onClick={() => router.push('/onboarding/ai-chat?mode=reset')}
@@ -347,59 +312,8 @@ export default function SettingsPage() {
                 <RefreshCw size={15} className="text-primary" />
               </div>
               <div>
-                <h3 className="font-bold">重新聊天分析</h3>
+                <h3 className="font-bold">重新 AI 聊天分析</h3>
                 <p className="text-xs text-text-secondary mt-0.5">保留照片與自介，只更新個性分析結果</p>
-              </div>
-            </div>
-            <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform text-text-secondary" />
-          </div>
-        </button>
-
-        {/* Notification Preferences */}
-        <button
-          className="card w-full text-left group"
-          onClick={() => router.push('/settings/notifications')}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255, 140, 107, 0.08)' }}>
-                <Bell size={15} className="text-primary" />
-              </div>
-              <h3 className="font-bold">🔔 通知設定</h3>
-            </div>
-            <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform text-text-secondary" />
-          </div>
-        </button>
-
-        {/* Blocked Users */}
-        <button
-          className="card w-full text-left group"
-          onClick={() => router.push('/settings/blocked')}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255, 140, 107, 0.08)' }}>
-                <ShieldOff size={15} className="text-primary" />
-              </div>
-              <h3 className="font-bold">🚫 封鎖名單</h3>
-            </div>
-            <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform text-text-secondary" />
-          </div>
-        </button>
-
-        {/* Safety Tips */}
-        <button
-          className="card w-full text-left group"
-          onClick={() => router.push('/safety')}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255, 140, 107, 0.08)' }}>
-                <Heart size={15} className="text-primary" />
-              </div>
-              <div>
-                <h3 className="font-bold">🛡️ 安全指引</h3>
-                <p className="text-xs text-text-secondary mt-0.5">約會安全小提醒</p>
               </div>
             </div>
             <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform text-text-secondary" />
@@ -541,8 +455,8 @@ export default function SettingsPage() {
                 <button className="btn-secondary flex-1 text-sm" onClick={() => { setShowDeleteConfirm(false); setDeleteInput(''); }}>取消</button>
                 <button
                   className="btn-primary flex-1 text-sm"
-                  style={deleteInput === '刪除' ? { background: '#DC2626', boxShadow: '0 4px 15px rgba(220, 38, 38, 0.35)' } : { background: '#9CA3AF', boxShadow: 'none' }}
-                  disabled={deleteInput !== '刪除' || deleting}
+                  style={deleteInput.trim() === '刪除' ? { background: '#DC2626', boxShadow: '0 4px 15px rgba(220, 38, 38, 0.35)' } : { background: '#9CA3AF', boxShadow: 'none' }}
+                  disabled={deleteInput.trim() !== '刪除' || deleting}
                   onClick={async () => {
                     setDeleting(true);
                     const ok = await deleteAccount();
@@ -632,36 +546,13 @@ export default function SettingsPage() {
 
             {/* AI personality preview */}
             {currentUser.aiPersonality && (
-              <div className="mx-5 mt-3 mb-5 space-y-3">
-                <div>
-                  <p className="text-xs font-semibold text-text-secondary mb-2">✨ 個性標籤</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(currentUser.aiPersonality.tags && currentUser.aiPersonality.tags.length > 0
-                      ? currentUser.aiPersonality.tags.slice(0, 6)
-                      : currentUser.aiPersonality.values.slice(0, 4)
-                    ).map((v, i) => (
-                      <span key={i} className="pill text-xs">{v}</span>
-                    ))}
-                  </div>
+              <div className="mx-5 mt-3 mb-5">
+                <p className="text-xs font-semibold text-text-secondary mb-2">✨ AI 分析的個性標籤</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {currentUser.aiPersonality.values.slice(0, 4).map((v, i) => (
+                    <span key={i} className="pill text-xs">{v}</span>
+                  ))}
                 </div>
-                {currentUser.aiPersonality.datingStyle && (
-                  <div>
-                    <p className="text-xs font-semibold text-text-secondary mb-1">💕 交往風格</p>
-                    <p className="text-xs text-text">{currentUser.aiPersonality.datingStyle}</p>
-                  </div>
-                )}
-                {currentUser.aiPersonality.redFlags && currentUser.aiPersonality.redFlags.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-text-secondary mb-1">🚩 地雷</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {currentUser.aiPersonality.redFlags.map((rf, i) => (
-                        <span key={i} className="inline-flex items-center text-xs py-1 px-2.5 rounded-full font-medium" style={{ background: 'rgba(255,90,90,0.08)', color: 'var(--danger)' }}>
-                          {rf}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 

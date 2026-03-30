@@ -10,9 +10,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: '未授權' }, { status: 401 });
   }
 
-  const rl = rateLimit('who-liked-me', authUser.id, 15, 60_000);
+  const rl = rateLimit('who-liked-me', authUser.id, 30, 60_000);
   if (!rl.allowed) {
-    return NextResponse.json({ error: '請求太頻繁' }, { status: 429 });
+    return NextResponse.json({ error: '操作太頻繁' }, { status: 429 });
   }
 
   const adminClient = createServerClient();

@@ -9,6 +9,7 @@ import { track } from '@/lib/analytics';
 import { moderateName } from '@/lib/moderation';
 import { TAIWAN_CITIES } from '@/lib/types';
 import { compressImage } from '@/lib/compressImage';
+import { clearProfileBioSource, loadProfileBioSource } from '@/lib/profile-bio-source';
 
 export default function ProfilePage() {
   const { currentUser, authReady, updateProfile, setOnboardingStep } = useApp();
@@ -23,6 +24,12 @@ export default function ProfilePage() {
   const [ageError, setAgeError] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | 'other'>(currentUser?.gender || 'other');
   const [region, setRegion] = useState(currentUser?.preferences.region || '');
+  const [occupation, setOccupation] = useState(currentUser?.occupation || '');
+  const [interestsInput, setInterestsInput] = useState((currentUser?.interests || []).join('、'));
+  const [heightCm, setHeightCm] = useState<number | ''>(currentUser?.heightCm || '');
+  const [weightKg, setWeightKg] = useState<number | ''>(currentUser?.weightKg || '');
+  const [education, setEducation] = useState(currentUser?.education || '');
+  const [petsInput, setPetsInput] = useState((currentUser?.pets || []).join('、'));
   const [nameError, setNameError] = useState('');
   const [photoError, setPhotoError] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
@@ -76,10 +83,24 @@ export default function ProfilePage() {
     if (!authReady) return;
     if (!currentUser) {
       router.replace('/');
+      return;
+    }
+    if (!currentUser.aiPersonality) {
+      router.replace('/onboarding/ai-chat');
     }
   }, [authReady, currentUser, router]);
 
-  if (!authReady || !currentUser) return null;
+  useEffect(() => {
+    if (!showCelebration) return;
+
+    const redirectTimer = window.setTimeout(() => {
+      router.replace('/home');
+    }, 1800);
+
+    return () => window.clearTimeout(redirectTimer);
+  }, [showCelebration, router]);
+
+  if (!authReady || !currentUser || !currentUser.aiPersonality) return null;
 
   const toggleGenderPref = (g: string) => {
     setGenderPref(prev => {
@@ -150,9 +171,24 @@ export default function ProfilePage() {
     const validAge = Math.max(18, Math.min(60, age));
     const validAgeMin = Math.max(18, Math.min(60, ageMin));
     const validAgeMax = Math.max(validAgeMin, Math.min(60, ageMax));
+    const normalizedOccupation = occupation.trim().slice(0, 40);
+    const normalizedInterests = interestsInput
+      .split(/[、,，\n]/)
+      .map(item => item.trim())
+      .filter(Boolean)
+      .slice(0, 8);
+    const normalizedHeight = typeof heightCm === 'number' ? Math.max(120, Math.min(230, heightCm)) : undefined;
+    const normalizedWeight = typeof weightKg === 'number' ? Math.max(30, Math.min(200, weightKg)) : undefined;
+    const normalizedEducation = education.trim().slice(0, 40);
+    const normalizedPets = petsInput
+      .split(/[、,，\n]/)
+      .map(item => item.trim())
+      .filter(Boolean)
+      .slice(0, 6);
+    const bioSourceMessages = loadProfileBioSource();
     setSaving(true);
     try {
-      let generatedBio = currentUser.aiPersonality?.bio || currentUser.bio || '';
+      let generatedBio = currentUser.bio || '';
       if (currentUser.aiPersonality) {
         try {
           const res = await fetch('/api/ai/chat', {
@@ -165,8 +201,15 @@ export default function ProfilePage() {
                 age: validAge,
                 gender,
                 region,
+                occupation: normalizedOccupation,
+                interests: normalizedInterests,
+                heightCm: normalizedHeight,
+                weightKg: normalizedWeight,
+                education: normalizedEducation,
+                pets: normalizedPets,
               },
               personality: currentUser.aiPersonality,
+              messages: bioSourceMessages,
             }),
           });
           if (res.ok) {
@@ -182,6 +225,12 @@ export default function ProfilePage() {
         name: nickname.trim() || currentUser.name,
         photos,
         bio: generatedBio,
+        occupation: normalizedOccupation,
+        interests: normalizedInterests,
+        heightCm: normalizedHeight,
+        weightKg: normalizedWeight,
+        education: normalizedEducation,
+        pets: normalizedPets,
         age: validAge,
         gender,
         preferences: {
@@ -193,8 +242,9 @@ export default function ProfilePage() {
         },
         onboardingComplete: true,
       });
-      track('onboarding_complete');
       setOnboardingStep(4);
+      track('onboarding_complete');
+      clearProfileBioSource();
       setShowCelebration(true);
     } finally {
       setSaving(false);
@@ -235,12 +285,12 @@ export default function ProfilePage() {
           <div className="space-y-3 animate-slide-up" style={{ animationDelay: '0.5s' }}>
             <button
               className="btn-primary flex items-center justify-center gap-2"
-              onClick={() => window.location.assign('/home')}
+              onClick={() => router.replace('/home')}
             >
               ✨ 開始探索配對
             </button>
             <p className="text-xs text-text-secondary opacity-60">
-              每天為你推薦最合適的人選
+              正在為你帶往首頁，開始探索配對
             </p>
           </div>
         </div>
@@ -390,10 +440,84 @@ export default function ProfilePage() {
           </select>
         </div>
 
+        <div>
+          <label className="text-sm font-medium text-text-secondary mb-2 block">💼 職業</label>
+          <input
+            type="text"
+            value={occupation}
+            onChange={(e) => setOccupation(e.target.value)}
+            placeholder="例如：產品經理、設計師、工程師"
+            maxLength={40}
+          />
+          <p className="text-xs text-text-secondary mt-1 opacity-60">這會一起帶進最後的正式自介。</p>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-text-secondary mb-2 block">🎨 興趣 / 日常</label>
+          <textarea
+            value={interestsInput}
+            onChange={(e) => setInterestsInput(e.target.value)}
+            placeholder="例如：做菜、看展、羽球、爬山、咖啡廳巡禮"
+            rows={3}
+            maxLength={120}
+          />
+          <p className="text-xs text-text-secondary mt-1 opacity-60">用「、」或逗號分隔都可以，填越具體越像真人。</p>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-text-secondary mb-2 block">📏 身高 / 體重</label>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              value={heightCm}
+              onChange={(e) => setHeightCm(e.target.value ? Number(e.target.value) : '')}
+              placeholder="身高"
+              min={120}
+              max={230}
+              className="w-28 text-center"
+            />
+            <span className="text-sm text-text-secondary">cm</span>
+            <input
+              type="number"
+              value={weightKg}
+              onChange={(e) => setWeightKg(e.target.value ? Number(e.target.value) : '')}
+              placeholder="體重"
+              min={30}
+              max={200}
+              className="w-28 text-center"
+            />
+            <span className="text-sm text-text-secondary">kg</span>
+          </div>
+          <p className="text-xs text-text-secondary mt-1 opacity-60">只會在真的自然時才少量融入自介，不會硬寫成規格表。</p>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-text-secondary mb-2 block">🎓 學歷</label>
+          <input
+            type="text"
+            value={education}
+            onChange={(e) => setEducation(e.target.value)}
+            placeholder="例如：大學、研究所、設計相關科系"
+            maxLength={40}
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-text-secondary mb-2 block">🐶 寵物</label>
+          <input
+            type="text"
+            value={petsInput}
+            onChange={(e) => setPetsInput(e.target.value)}
+            placeholder="例如：一隻米克斯、一隻橘貓、目前沒有"
+            maxLength={80}
+          />
+          <p className="text-xs text-text-secondary mt-1 opacity-60">如果有寵物，這類資訊通常很適合讓自介更有溫度。</p>
+        </div>
+
         <div className="card !border-none" style={{ background: 'linear-gradient(135deg, rgba(255, 140, 107, 0.06), rgba(255, 107, 107, 0.04))' }}>
-          <p className="text-sm font-medium text-text-secondary mb-2">✍️ 自我介紹會在下一步自動生成</p>
+          <p className="text-sm font-medium text-text-secondary mb-2">✍️ 正式自介會在你送出這頁後才生成</p>
           <p className="text-sm text-text-secondary leading-relaxed">
-            小默會把你剛剛的聊天內容，和你填的名字、性別、年齡與地區一起整理成正式自介。
+            小默會先保留你剛剛的聊天內容，等你填完名字、性別、年齡、地區、職業與興趣後，再一起整理成更像真人寫的正式自介。
           </p>
           {currentUser.aiPersonality?.bio && (
             <div className="mt-3 rounded-2xl p-3" style={{ background: 'rgba(255,255,255,0.55)' }}>

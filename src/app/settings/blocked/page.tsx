@@ -61,6 +61,9 @@ export default function BlockedUsersPage() {
         setToast('解除封鎖失敗');
         setTimeout(() => setToast(''), 2500);
       }
+    } catch {
+      setToast('網路錯誤，請稍後再試');
+      setTimeout(() => setToast(''), 2500);
     } finally {
       setUnblocking('');
     }

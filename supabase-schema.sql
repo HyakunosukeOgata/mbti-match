@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS user_photos (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   url TEXT NOT NULL,
   sort_order INTEGER NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(user_id, sort_order)
 );
 
 CREATE INDEX idx_user_photos_user ON user_photos(user_id);
@@ -83,10 +84,6 @@ CREATE TABLE IF NOT EXISTS matches (
   topic_answers JSONB DEFAULT '{}',  -- {userId: answer}
   compatibility INTEGER DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'expired', 'removed')),
-  scoring_breakdown JSONB,
-  matched_signals TEXT[] DEFAULT '{}',
-  caution_signals TEXT[] DEFAULT '{}',
-  recommendation_reasons JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(user1_id, user2_id)
 );
@@ -123,10 +120,6 @@ CREATE TABLE IF NOT EXISTS daily_cards (
   liked BOOLEAN DEFAULT FALSE,
   skipped BOOLEAN DEFAULT FALSE,
   card_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  scoring_breakdown JSONB,
-  matched_signals TEXT[] DEFAULT '{}',
-  caution_signals TEXT[] DEFAULT '{}',
-  recommendation_reasons JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(user_id, target_user_id, card_date)
 );
@@ -164,7 +157,7 @@ CREATE TABLE IF NOT EXISTS reports (
   reported_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   match_id UUID REFERENCES matches(id) ON DELETE SET NULL,
   reason TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'reviewed', 'dismissed', 'escalated')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'reviewed', 'dismissed')),
   admin_note TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -177,7 +170,7 @@ CREATE INDEX idx_reports_status ON reports(status);
 CREATE TABLE IF NOT EXISTS notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('match', 'message', 'like', 'weekly', 'system', 'profile_view')),
+  type TEXT NOT NULL CHECK (type IN ('match', 'message', 'like', 'weekly', 'system')),
   title TEXT NOT NULL,
   body TEXT NOT NULL DEFAULT '',
   link TEXT,
@@ -212,36 +205,6 @@ CREATE TABLE IF NOT EXISTS analytics_events (
 
 CREATE INDEX idx_analytics_events_name ON analytics_events(event_name, created_at DESC);
 CREATE INDEX idx_analytics_events_user ON analytics_events(user_id);
-
--- ============================
--- 13. AUDIT_LOGS — 操作紀錄（from Kin）
--- ============================
-CREATE TABLE IF NOT EXISTS audit_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  actor_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-  action TEXT NOT NULL,
-  target_type TEXT NOT NULL,
-  target_id TEXT NOT NULL,
-  metadata JSONB,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_audit_logs_actor ON audit_logs(actor_user_id);
-CREATE INDEX idx_audit_logs_action ON audit_logs(action, created_at DESC);
-CREATE INDEX idx_audit_logs_target ON audit_logs(target_type, target_id);
-
--- ============================
--- 14. CONVERSATION_STARTERS — AI 生成的開場白（from Kin）
--- ============================
-CREATE TABLE IF NOT EXISTS conversation_starters (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  match_id UUID NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  starters TEXT[] NOT NULL DEFAULT '{}',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_conv_starters_match ON conversation_starters(match_id);
 
 -- ============================
 -- RLS POLICIES
@@ -357,11 +320,6 @@ CREATE POLICY "blocked_insert_own" ON blocked_users
     blocker_id IN (SELECT id FROM users WHERE auth_id = auth.uid())
   );
 
-CREATE POLICY "blocked_delete_own" ON blocked_users
-  FOR DELETE USING (
-    blocker_id IN (SELECT id FROM users WHERE auth_id = auth.uid())
-  );
-
 -- Reports: 只能新增，不能看（管理員用 service role）
 CREATE POLICY "reports_insert_own" ON reports
   FOR INSERT WITH CHECK (
@@ -406,21 +364,6 @@ CREATE POLICY "photo_consents_update" ON photo_consents
 -- Analytics: 只能寫入（管理員用 service role 讀取）
 CREATE POLICY "analytics_insert" ON analytics_events
   FOR INSERT WITH CHECK (TRUE);
-
--- Audit logs: server-side only (service role)
-ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
-
--- Conversation starters: 配對參與者可見
-ALTER TABLE conversation_starters ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "conv_starters_select_involved" ON conversation_starters
-  FOR SELECT USING (
-    match_id IN (
-      SELECT id FROM matches
-      WHERE user1_id IN (SELECT id FROM users WHERE auth_id = auth.uid())
-         OR user2_id IN (SELECT id FROM users WHERE auth_id = auth.uid())
-    )
-  );
 
 -- ============================
 -- STORAGE BUCKET — 用戶照片

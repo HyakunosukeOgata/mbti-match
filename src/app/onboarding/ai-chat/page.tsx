@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, Sparkles, Loader2 } from 'lucide-react';
 import { track } from '@/lib/analytics';
+import { clearProfileBioSource, saveProfileBioSource } from '@/lib/profile-bio-source';
 
 interface ChatMsg {
   role: 'user' | 'assistant';
@@ -44,6 +45,21 @@ export default function AIOnboardingChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const resetChat = useCallback(() => {
+    try {
+      localStorage.removeItem(CHAT_STORAGE_KEY);
+    } catch {
+      // ignore storage failures
+    }
+    clearProfileBioSource();
+    setMessages([]);
+    setInput('');
+    setError('');
+    setReadyToAnalyze(false);
+    setLoading(false);
+    setAnalyzing(false);
+  }, []);
+
   const userMessageCount = messages.filter(m => m.role === 'user').length;
 
   // Persist chat to localStorage on every change
@@ -57,6 +73,14 @@ export default function AIOnboardingChatPage() {
       router.replace('/');
     }
   }, [authReady, currentUser, router]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('mode') !== 'reset') return;
+    resetChat();
+    router.replace('/onboarding/ai-chat');
+  }, [resetChat, router]);
 
   // Get initial AI greeting
   useEffect(() => {
@@ -74,15 +98,20 @@ export default function AIOnboardingChatPage() {
             messages: [{ role: 'user', content: '你好，我剛加入 Mochi' }],
           }),
         });
+        if (!res.ok) throw new Error('API error');
         const data = await res.json();
-        if (!cancelled && data.reply) {
-          setMessages([{ role: 'assistant', content: data.reply }]);
+        if (!cancelled) {
+          if (data.reply) {
+            setMessages([{ role: 'assistant', content: data.reply }]);
+          } else {
+            throw new Error('Missing greeting reply');
+          }
         }
       } catch {
         if (!cancelled) {
           setMessages([{
             role: 'assistant',
-            content: '嗨！我是小默 ✨ 歡迎來到 Mochi！在開始配對之前，我想先跟你聊聊天，好幫你寫一段超棒的自我介紹。放輕鬆，就像跟朋友聊天一樣～\n\n先跟我說說，你平常最喜歡做什麼？',
+            content: '嗨！我是小默 ✨ 歡迎來到 Mochi！在開始配對之前，我想先跟你聊聊天，好更了解你。放輕鬆，就像跟朋友聊天一樣～\n\n先跟我說說，你平常最喜歡做什麼？',
           }]);
         }
       } finally {
@@ -99,9 +128,21 @@ export default function AIOnboardingChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    if (messages.length === 0 || analyzing) return undefined;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [analyzing, messages.length]);
+
   const sendMessage = useCallback(async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text || loading || analyzing || readyToAnalyze) return;
 
     setInput('');
     setError('');
@@ -132,7 +173,7 @@ export default function AIOnboardingChatPage() {
       setLoading(false);
       inputRef.current?.focus();
     }
-  }, [input, loading, messages]);
+  }, [analyzing, input, loading, messages, readyToAnalyze]);
 
   const finishChat = useCallback(async () => {
     if (analyzing) return;
@@ -177,8 +218,8 @@ export default function AIOnboardingChatPage() {
             analyzedAt: new Date().toISOString(),
           },
         });
-
         setOnboardingStep(3);
+        saveProfileBioSource(messages);
         try { localStorage.removeItem(CHAT_STORAGE_KEY); } catch { /* ignore */ }
         router.push('/personality');
       } else {
@@ -189,7 +230,18 @@ export default function AIOnboardingChatPage() {
     } finally {
       setAnalyzing(false);
     }
-  }, [analyzing, messages, startTime, userMessageCount, updateProfile, currentUser?.bio, setOnboardingStep, router]);
+  }, [analyzing, messages, startTime, userMessageCount, updateProfile, setOnboardingStep, router]);
+
+  const retryLastStep = useCallback(() => {
+    setError('');
+    if (readyToAnalyze) {
+      void finishChat();
+      return;
+    }
+    if (input.trim()) {
+      void sendMessage();
+    }
+  }, [finishChat, input, readyToAnalyze, sendMessage]);
 
   if (!authReady || !currentUser) return null;
 
@@ -203,7 +255,7 @@ export default function AIOnboardingChatPage() {
         </div>
         <h2 className="text-xl font-bold mb-2 animate-fade-in">正在分析你的個性 ✨</h2>
         <p className="text-text-secondary text-sm text-center animate-fade-in">
-          正在根據我們的聊天生成你的專屬介紹...
+          正在根據我們的聊天整理你的個性摘要...
         </p>
         <div className="mt-6 w-48">
           <div className="progress-bar">
@@ -249,7 +301,7 @@ export default function AIOnboardingChatPage() {
                 borderBottomLeftRadius: msg.role !== 'user' ? '6px' : undefined,
               }}
             >
-              {msg.content}
+              <p className="whitespace-pre-wrap break-words">{msg.content}</p>
             </div>
           </div>
         ))}
@@ -271,6 +323,15 @@ export default function AIOnboardingChatPage() {
       {error && (
         <div className="px-4 py-2">
           <p className="text-xs text-danger text-center">{error}</p>
+          {(readyToAnalyze || input.trim()) && (
+            <button
+              className="mx-auto mt-2 block text-xs font-medium text-text-secondary underline underline-offset-2"
+              onClick={retryLastStep}
+              disabled={loading || analyzing}
+            >
+              再試一次
+            </button>
+          )}
         </div>
       )}
 
@@ -281,9 +342,10 @@ export default function AIOnboardingChatPage() {
             className="btn-primary mb-3 flex items-center justify-center gap-2"
             onClick={finishChat}
             disabled={analyzing}
+            data-testid="onboarding-finish-chat"
           >
             <Sparkles size={16} />
-            完成聊天，生成我的介紹 ✨
+            完成聊天，整理我的摘要 ✨
           </button>
         )}
         <div className="flex gap-2">
@@ -291,18 +353,20 @@ export default function AIOnboardingChatPage() {
             ref={inputRef}
             type="text"
             className="input flex-1"
-            placeholder="說點什麼..."
+            placeholder={readyToAnalyze ? '小默已經了解你了，點上方按鈕整理摘要' : '說點什麼...'}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) sendMessage(); }}
-            disabled={loading}
+            disabled={loading || readyToAnalyze}
             maxLength={500}
             autoComplete="off"
+            data-testid="onboarding-chat-input"
           />
           <button
             className="btn-primary !w-11 !h-11 !p-0 flex items-center justify-center flex-shrink-0"
             onClick={sendMessage}
-            disabled={!input.trim() || loading}
+            disabled={!input.trim() || loading || readyToAnalyze}
+            data-testid="onboarding-send-button"
           >
             {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
           </button>

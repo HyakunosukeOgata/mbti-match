@@ -1,7 +1,5 @@
 import { UserProfile } from './types';
-import { scoreMatch, calculateEnhancedCompatibility, type ScoreResult, type ScoringBreakdown } from './matching-engine';
-
-export type { ScoreResult, ScoringBreakdown };
+import { scoreMatch, type ScoreResult } from './matching-engine';
 
 export interface CompatibilityInsight {
   summary: string;
@@ -9,35 +7,25 @@ export interface CompatibilityInsight {
   watchouts: string[];
   starters: string[];
   sharedHighlights: string[];
-  matchedSignals: string[];
-  cautionSignals: string[];
-  breakdown: ScoringBreakdown;
 }
 
 /**
  * 計算兩個使用者的配對分數 (0-100)
- * Enhanced: 使用 Kin 的多維度評分引擎
+ * 基於：AI 人格向量匹配
  */
 export function calculateCompatibility(me: UserProfile, other: UserProfile): number {
-  return calculateEnhancedCompatibility(me, other);
-}
-
-/**
- * 取得完整配對分析結果（含分數明細和訊號）
- */
-export function getFullScoreResult(me: UserProfile, other: UserProfile): ScoreResult {
-  return scoreMatch(me, other);
+  const raw = calculateAIPersonalityMatch(me, other);
+  return Math.max(35, Math.min(100, raw));
 }
 
 export function getCompatibilityInsight(me: UserProfile, other: UserProfile): CompatibilityInsight {
-  const result = scoreMatch(me, other);
-  const { totalScore: compatibility, matchedSignals, cautionSignals, breakdown } = result;
+  const compatibility = calculateCompatibility(me, other);
   const sharedValues = getSharedValues(me, other);
   const strengths: string[] = [];
   const watchouts: string[] = [];
   const starters: string[] = [];
 
-  // Use engine signals for structured insights
+  // AI personality-based insights
   if (sharedValues.length > 0) {
     strengths.push(`你們都重視「${sharedValues[0]}」，價值觀很接近`);
     if (sharedValues.length > 1) {
@@ -45,12 +33,18 @@ export function getCompatibilityInsight(me: UserProfile, other: UserProfile): Co
     }
   }
 
-  if (matchedSignals.includes("溝通風格相近")) {
-    strengths.push('你們的溝通風格相近，聊天容易有同頻感');
-  } else if (me.aiPersonality?.communicationStyle && other.aiPersonality?.communicationStyle) {
-    strengths.push('你們的溝通風格不同，容易給彼此新的刺激');
+  // Communication style insights from AI personality
+  const meStyle = me.aiPersonality?.communicationStyle;
+  const otherStyle = other.aiPersonality?.communicationStyle;
+  if (meStyle && otherStyle) {
+    if (meStyle === otherStyle) {
+      strengths.push('你們的溝通風格相近，聊天容易有同頻感');
+    } else {
+      strengths.push('你們的溝通風格不同，容易給彼此新的刺激');
+    }
   }
 
+  // Trait-based insights
   const myTraits = me.aiPersonality?.traits || [];
   const otherTraits = other.aiPersonality?.traits || [];
   const sharedTraitNames = myTraits.filter(t => otherTraits.some(o => o.name === t.name)).map(t => t.name);
@@ -58,14 +52,16 @@ export function getCompatibilityInsight(me: UserProfile, other: UserProfile): Co
     strengths.push(`你們都有「${sharedTraitNames[0]}」的特質，互動時會很自然`);
   }
 
-  // Watchouts from engine signals
-  for (const signal of cautionSignals) {
-    watchouts.push(signal);
-  }
-  if (sharedValues.length === 0 && sharedTraitNames.length === 0 && watchouts.length === 0) {
+  if (sharedValues.length === 0 && sharedTraitNames.length === 0) {
     watchouts.push('價值觀和特質差異較大，先從生活小事聊起會比較自然');
   }
 
+  if (me.aiPersonality?.relationshipGoal && other.aiPersonality?.relationshipGoal &&
+      me.aiPersonality.relationshipGoal !== other.aiPersonality.relationshipGoal) {
+    watchouts.push('你們對感情的期待方向不太一樣，可以先聊聊彼此的想法');
+  }
+
+  // Generate conversation starters from AI personality
   if (me.aiPersonality?.values[0]) {
     starters.push(`你覺得「${me.aiPersonality.values[0]}」在感情中具體是什麼樣子？`);
   }
@@ -92,9 +88,6 @@ export function getCompatibilityInsight(me: UserProfile, other: UserProfile): Co
     watchouts: uniqueWatchouts,
     starters: uniqueStarters,
     sharedHighlights,
-    matchedSignals,
-    cautionSignals,
-    breakdown,
   };
 }
 
@@ -158,6 +151,13 @@ export function getSharedValues(me: UserProfile, other: UserProfile): string[] {
   const myValues = me.aiPersonality?.values || [];
   const otherValues = new Set((other.aiPersonality?.values || []).map(v => v.toLowerCase()));
   return myValues.filter(v => otherValues.has(v.toLowerCase()));
+}
+
+/**
+ * 取得完整配對評分結果（包括維度分數與信號）
+ */
+export function getFullScoreResult(me: UserProfile, other: UserProfile): ScoreResult {
+  return scoreMatch(me, other);
 }
 
 const DAILY_EXPOSURE_LIMIT = 10;

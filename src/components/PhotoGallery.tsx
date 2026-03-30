@@ -116,7 +116,7 @@ export default function PhotoGallery({ photos, name, mode = 'thumbnail', size = 
                   <button
                     key={i}
                     onClick={(e) => { e.stopPropagation(); setCurrentIndex(i); }}
-                    className={`w-3 h-3 rounded-full transition-all min-w-[44px] min-h-[44px] flex items-center justify-center bg-transparent p-0`}
+                    className={`rounded-full transition-all w-[44px] h-[44px] flex items-center justify-center bg-transparent p-0`}
                     aria-label={`照片 ${i + 1}`}
                   >
                     <span className={`block w-2.5 h-2.5 rounded-full transition-all ${i === currentIndex ? 'bg-white scale-125' : 'bg-white/50'}`} />

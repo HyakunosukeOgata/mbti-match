@@ -1,7 +1,12 @@
 import { supabase } from './supabase';
 
 function dataUrlToBlob(dataUrl: string) {
-  const [header, base64] = dataUrl.split(',');
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex === -1) {
+    throw new Error('Invalid data URL format');
+  }
+  const header = dataUrl.slice(0, commaIndex);
+  const base64 = dataUrl.slice(commaIndex + 1);
   const mimeMatch = header.match(/data:(.*?);base64/);
   const mimeType = mimeMatch?.[1] || 'image/jpeg';
   const binary = atob(base64);

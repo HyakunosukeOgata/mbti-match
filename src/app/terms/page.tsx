@@ -17,7 +17,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-lg font-bold text-text mb-2">1. 服務說明</h2>
-          <p>Mochi 默契（以下簡稱「本服務」）是一款基於個性分析的社交配對平台，旨在幫助使用者透過智慧配對找到契合的對象。</p>
+          <p>Mochi 默契（以下簡稱「本服務」）是一款基於 AI 個性分析的社交配對平台，旨在幫助使用者透過智慧配對找到契合的對象。</p>
         </section>
 
         <section>
@@ -50,7 +50,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-lg font-bold text-text mb-2">5. 配對機制</h2>
-          <p>本服務透過個性分析計算配對相容度。配對結果僅供參考，不保證配對成功或感情結果。</p>
+          <p>本服務透過 AI 個性分析計算配對相容度。配對結果僅供參考，不保證配對成功或感情結果。</p>
         </section>
 
         <section>
@@ -75,7 +75,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-lg font-bold text-text mb-2">8. 隱私保護</h2>
-          <p>您的個人資料受我們的<a href="/privacy" className="text-primary underline py-3 inline-block">隱私權政策</a>保護。使用本服務即表示您同意該政策中的資料處理方式。</p>
+          <p>您的個人資料受我們的<a href="/privacy" className="text-primary underline">隱私權政策</a>保護。使用本服務即表示您同意該政策中的資料處理方式。</p>
         </section>
 
         <section>

@@ -78,7 +78,7 @@ export default function NotificationsPage() {
     };
   }, [authReady, currentUser?.dbId]);
 
-  // Load likers when tab switches
+  // Load likers when tab switches (always re-fetch on tab selection)
   useEffect(() => {
     if (tab !== 'likes' || !session?.access_token) return;
     setLoadingLikers(true);
@@ -91,7 +91,7 @@ export default function NotificationsPage() {
       .finally(() => setLoadingLikers(false));
   }, [tab, session?.access_token]);
 
-  // Load viewers when tab switches
+  // Load viewers when tab switches (always re-fetch on tab selection)
   useEffect(() => {
     if (tab !== 'views' || !session?.access_token) return;
     setLoadingViewers(true);
@@ -111,7 +111,7 @@ export default function NotificationsPage() {
       return;
     }
     if (!currentUser.onboardingComplete) {
-      router.replace(currentUser.aiPersonality ? '/personality' : '/onboarding/ai-chat');
+      router.replace('/onboarding/ai-chat');
       return;
     }
     track('page_view', { page: 'notifications' });

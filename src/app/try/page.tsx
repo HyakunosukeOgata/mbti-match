@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, Sparkles, Loader2, Heart, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
+import { clearProfileBioSource, saveProfileBioSource } from '@/lib/profile-bio-source';
+import { getAttachmentStyleLabel } from '@/lib/personality-labels';
 
 interface ChatMsg {
   role: 'user' | 'assistant';
@@ -61,9 +63,14 @@ export default function TryPage() {
             messages: [{ role: 'user', content: '你好，我想試試看 Mochi' }],
           }),
         });
+        if (!res.ok) throw new Error('API error');
         const data = await res.json();
-        if (!cancelled && data.reply) {
-          setMessages([{ role: 'assistant', content: data.reply }]);
+        if (!cancelled) {
+          if (data.reply) {
+            setMessages([{ role: 'assistant', content: data.reply }]);
+          } else {
+            throw new Error('Missing greeting reply');
+          }
         }
       } catch {
         if (!cancelled) {
@@ -86,9 +93,21 @@ export default function TryPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    if (messages.length === 0 || analyzing || result) return undefined;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [analyzing, messages.length, result]);
+
   const sendMessage = useCallback(async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text || loading || analyzing || readyToAnalyze) return;
 
     setInput('');
     setError('');
@@ -117,7 +136,7 @@ export default function TryPage() {
       setLoading(false);
       inputRef.current?.focus();
     }
-  }, [input, loading, messages]);
+  }, [analyzing, input, loading, messages, readyToAnalyze]);
 
   const finishChat = useCallback(async () => {
     if (analyzing) return;
@@ -136,6 +155,7 @@ export default function TryPage() {
         const p = data.personality;
         const pp = p.personality_profile || {};
         const sf = p.scoring_features || {};
+        saveProfileBioSource(messages);
         setResult({
           bio: p.bio || '',
           traits: pp.traits || p.traits || [],
@@ -162,6 +182,7 @@ export default function TryPage() {
 
   const restart = () => {
     localStorage.removeItem(STORAGE_KEY);
+    clearProfileBioSource();
     setMessages([]);
     setReadyToAnalyze(false);
     setResult(null);
@@ -197,13 +218,13 @@ export default function TryPage() {
             <div className="w-16 h-16 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #FF8C6B, #FF6B8A)' }}>
               <Sparkles size={28} className="text-white" />
             </div>
-            <h1 className="text-2xl font-bold mb-1">你的個性檔案</h1>
-            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>由小默根據聊天分析生成</p>
+            <h1 className="text-2xl font-bold mb-1">你的聊天摘要</h1>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>由小默先根據聊天整理，正式自介會在填完資料後生成</p>
           </div>
 
-          {/* Bio */}
+          {/* Summary */}
           <div className="rounded-2xl p-4 mb-4" style={{ background: 'var(--bg-card)' }}>
-            <p className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>✏️ 自我介紹</p>
+            <p className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>📝 目前聊天摘要</p>
             <p className="text-[15px] leading-relaxed">{result.bio as string}</p>
           </div>
 
@@ -264,7 +285,7 @@ export default function TryPage() {
             {String(result.attachmentStyle || '') && (
               <div>
                 <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>🔗 依附風格</p>
-                <p className="text-sm mt-0.5">{String(result.attachmentStyle)}</p>
+                <p className="text-sm mt-0.5">{getAttachmentStyleLabel(String(result.attachmentStyle || 'mixed') as 'secure' | 'anxious' | 'avoidant' | 'mixed')}</p>
               </div>
             )}
             {String(result.loveLanguage || '') && (
@@ -291,10 +312,10 @@ export default function TryPage() {
 
           {/* CTA */}
           <div className="mt-6 space-y-3">
-            <Link href="/" className="block">
+            <Link href="/try/claim" className="block">
               <button className="w-full py-3.5 rounded-2xl text-white font-semibold flex items-center justify-center gap-2" style={{ background: 'linear-gradient(135deg, #FF8C6B, #FF6B8A)' }}>
                 <Heart size={18} />
-                註冊 Mochi，開始配對
+                保留聊天內容，繼續註冊
                 <ArrowRight size={16} />
               </button>
             </Link>
@@ -318,7 +339,7 @@ export default function TryPage() {
           </div>
           <div>
             <h1 className="text-lg font-bold leading-tight">體驗 Mochi 默契</h1>
-            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>跟小默聊聊天，看看你的個性檔案</p>
+            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>跟小默聊聊天，先保存你的聊天理解</p>
           </div>
         </div>
         <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
@@ -331,7 +352,7 @@ export default function TryPage() {
           />
         </div>
         <p className="text-xs mt-1.5" style={{ color: 'var(--text-secondary)' }}>
-          {readyToAnalyze ? '✅ 可以生成你的個性檔案了！' : `聊幾句就好，不用註冊 (${userMessageCount}/6)`}
+          {readyToAnalyze ? '✅ 可以先整理你的聊天摘要了！' : `聊幾句就好，不用註冊 (${userMessageCount}/6)`}
         </p>
       </div>
 
@@ -349,7 +370,7 @@ export default function TryPage() {
                 borderBottomLeftRadius: msg.role !== 'user' ? '6px' : undefined,
               }}
             >
-              {msg.content}
+              <p className="whitespace-pre-wrap break-words">{msg.content}</p>
             </div>
           </div>
         ))}
@@ -371,6 +392,16 @@ export default function TryPage() {
       {error && (
         <div className="px-4 py-2">
           <p className="text-xs text-center" style={{ color: 'var(--danger)' }}>{error}</p>
+          {(readyToAnalyze || input.trim()) && (
+            <button
+              className="mx-auto mt-2 block text-xs font-medium underline underline-offset-2"
+              style={{ color: 'var(--text-secondary)' }}
+              onClick={() => { if (readyToAnalyze) { void finishChat(); } else { void sendMessage(); } }}
+              disabled={loading || analyzing}
+            >
+              再試一次
+            </button>
+          )}
         </div>
       )}
 
@@ -381,9 +412,10 @@ export default function TryPage() {
             className="w-full py-3 rounded-2xl text-white font-semibold mb-3 flex items-center justify-center gap-2"
             style={{ background: 'linear-gradient(135deg, #FF8C6B, #FF6B8A)' }}
             onClick={finishChat}
+            data-testid="try-finish-chat"
           >
             <Sparkles size={16} />
-            看看我的個性檔案 ✨
+            整理這段聊天內容 ✨
           </button>
         )}
         <div className="flex gap-2">
@@ -392,19 +424,21 @@ export default function TryPage() {
             type="text"
             className="flex-1 h-11 px-4 rounded-xl text-sm outline-none"
             style={{ background: 'var(--bg-input)', color: 'var(--text)' }}
-            placeholder="說點什麼..."
+            placeholder={readyToAnalyze ? '小默已經整理得差不多了，點上方按鈕繼續' : '說點什麼...'}
             value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) sendMessage(); }}
-            disabled={loading}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) void sendMessage(); }}
+            disabled={loading || readyToAnalyze}
             maxLength={500}
             autoComplete="off"
+            data-testid="try-chat-input"
           />
           <button
             className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 text-white disabled:opacity-40"
             style={{ background: 'linear-gradient(135deg, #FF8C6B, #FF6B8A)' }}
-            onClick={sendMessage}
-            disabled={!input.trim() || loading}
+            onClick={() => void sendMessage()}
+            disabled={!input.trim() || loading || readyToAnalyze}
+            data-testid="try-send-button"
           >
             {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
           </button>

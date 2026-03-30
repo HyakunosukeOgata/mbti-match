@@ -60,7 +60,7 @@ export default function SafetyPage() {
     <div className="min-h-dvh pb-12">
       <div className="px-6 pt-8 pb-4">
         <div className="flex items-center gap-3">
-          <button onClick={() => router.back()} className="p-1 rounded-full hover:bg-gray-100 transition-colors">
+          <button onClick={() => router.back()} className="p-1 rounded-full hover:bg-gray-100 transition-colors" aria-label="返回">
             <ArrowLeft size={22} className="text-text-secondary" />
           </button>
           <h1 className="text-xl font-bold">

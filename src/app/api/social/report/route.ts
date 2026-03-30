@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   const matchId = typeof body?.matchId === 'string' ? body.matchId : null;
   const reason = typeof body?.reason === 'string' ? body.reason.trim() : null;
 
-  if (!reportedUserDbId || !reason) {
+  if (!reportedUserDbId || !reason || reason.length > 1000) {
     return NextResponse.json({ error: '缺少必要參數' }, { status: 400 });
   }
 

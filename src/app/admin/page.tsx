@@ -99,7 +99,8 @@ export default function AdminPage() {
     if (authed && adminCode) {
       void refresh();
     }
-  }, [authed, refresh]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authed]);
 
   // Reset detail views when changing tab
   useEffect(() => {

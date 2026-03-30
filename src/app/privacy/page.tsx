@@ -19,7 +19,7 @@ export default function PrivacyPage() {
           <h2 className="text-lg font-bold text-text mb-2">1. 資料蒐集</h2>
           <p>Mochi 默契（以下簡稱「本服務」）在您使用本服務時，可能蒐集以下資訊：</p>
           <ul className="list-disc pl-5 space-y-1 mt-2">
-            <li>您提供的個人資料：暱稱、年齡、性別、自我介紹、照片、個性分析結果</li>
+            <li>您提供的個人資料：暱稱、年齡、性別、自我介紹、照片、AI 個性分析結果</li>
             <li>配對偏好：年齡範圍、性別偏好、地區</li>
             <li>使用行為：瀏覽、配對互動、聊天紀錄</li>
             <li>裝置資訊：瀏覽器類型、作業系統、裝置識別碼</li>

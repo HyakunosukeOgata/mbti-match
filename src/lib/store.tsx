@@ -255,10 +255,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const matchIds = visibleMatchRows.map((row) => row.id);
     const participantIds = [...new Set(visibleMatchRows.flatMap((row) => [row.user1_id, row.user2_id]))];
-
-    // Load latest 100 messages per batch (covers chat scroll + match previews)
     const [{ data: messageRows, error: messageError }, profilesByDbId] = await Promise.all([
-      supabase.from('messages').select('*').in('match_id', matchIds).order('created_at', { ascending: false }).limit(matchIds.length * 100),
+      supabase.from('messages').select('*').in('match_id', matchIds).order('created_at', { ascending: true }),
       loadProfilesByDbIds(supabase, participantIds),
     ]);
 
@@ -272,10 +270,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const bucket = messagesByMatchId.get(message.match_id) || [];
       bucket.push(message);
       messagesByMatchId.set(message.match_id, bucket);
-    }
-    // Re-sort ascending (query fetched descending for LIMIT to get latest)
-    for (const [, msgs] of messagesByMatchId) {
-      msgs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     }
 
     const mapped = visibleMatchRows
@@ -374,18 +368,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .subscribe();
 
     const channelC = supabase
-      .channel(`likes-to-${currentUser.dbId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'likes', filter: `to_user_id=eq.${currentUser.dbId}` }, refreshSocial)
+      .channel(`likes-${currentUser.dbId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'likes' }, refreshSocial)
       .subscribe();
 
     const channelD = supabase
-      .channel(`likes-from-${currentUser.dbId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'likes', filter: `from_user_id=eq.${currentUser.dbId}` }, refreshSocial)
-      .subscribe();
-
-    // Note: messages channel has no user-level filter available, but loadMatches
-    // already filters by current user's matches so the re-fetch is scoped.
-    const channelE = supabase
       .channel(`messages-${currentUser.dbId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => { void loadMatches(); })
       .subscribe();
@@ -395,7 +382,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       void supabase.removeChannel(channelB);
       void supabase.removeChannel(channelC);
       void supabase.removeChannel(channelD);
-      void supabase.removeChannel(channelE);
     };
   }, [authReady, currentUser?.dbId, currentUser?.id, loadLikes, loadMatches]);
 
@@ -455,9 +441,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const activeSession = sessionRef.current;
     if (!activeSession?.user) return;
 
-    // Server-side age validation: reject under 18
-    if (typeof updated.age === 'number' && updated.age < 18) return;
-
     const { data, error } = await supabase.from('users').upsert({
       auth_id: activeSession.user.id,
       email: activeSession.user.email,
@@ -475,6 +458,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         genderPreference: updated.preferences.genderPreference,
         preferredRegions: updated.preferences.preferredRegions || [],
         hiddenMatchIds: updated.preferences.hiddenMatchIds || [],
+        notificationPrefs: updated.preferences.notificationPrefs || undefined,
       },
       onboarding_complete: updated.onboardingComplete,
     }, { onConflict: 'auth_id' }).select('id').single();
@@ -549,11 +533,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     let imageUrl: string | undefined;
     if (payload.imageDataUrl) {
-      imageUrl = await uploadChatImage({
-        authUserId,
-        matchId,
-        dataUrl: payload.imageDataUrl,
-      });
+      try {
+        imageUrl = await uploadChatImage({
+          authUserId,
+          matchId,
+          dataUrl: payload.imageDataUrl,
+        });
+      } catch {
+        return; // Upload failed — don't add a ghost message
+      }
     }
 
     const optimisticTimestamp = new Date().toISOString();
@@ -617,8 +605,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }));
       }, 900);
     }
-    // Note: Realtime subscription (channelE) handles re-syncing messages
-  }, [buildDemoReply, isDemoBotUser]);
+
+    await loadMatches();
+  }, [buildDemoReply, isDemoBotUser, loadMatches]);
 
   const removeMatchAction = useCallback(async (matchId: string) => {
     const activeUser = currentUserRef.current;

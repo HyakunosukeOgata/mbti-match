@@ -45,12 +45,18 @@ export default function NotificationPrefsPage() {
   }, [authReady, currentUser, router]);
 
   const toggle = async (key: keyof NotifPrefs) => {
+    const prev = { ...prefs };
     const next = { ...prefs, [key]: !prefs[key] };
     setPrefs(next);
-    await updateProfile({
-      preferences: { ...currentUser!.preferences, notificationPrefs: next },
-    });
-    setToast('✅ 已更新');
+    try {
+      await updateProfile({
+        preferences: { ...currentUser!.preferences, notificationPrefs: next },
+      });
+      setToast('✅ 已更新');
+    } catch {
+      setPrefs(prev);
+      setToast('❌ 更新失敗');
+    }
     setTimeout(() => setToast(''), 1500);
   };
 

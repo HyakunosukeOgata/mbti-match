@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase-server';
 import { getAuthenticatedUser } from '@/lib/server-auth';
-import { rateLimit } from '@/lib/rate-limit';
 
 type AnalyticsPayload = {
   name?: string;
@@ -17,12 +16,6 @@ const VALID_EVENTS = new Set([
 ]);
 
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-  const rl = rateLimit('analytics', ip, 100, 60_000);
-  if (!rl.allowed) {
-    return NextResponse.json({ error: '請求太頻繁' }, { status: 429 });
-  }
-
   const body = await req.json().catch(() => null) as AnalyticsPayload | null;
   const eventName = typeof body?.name === 'string' ? body.name.trim() : '';
 
@@ -47,7 +40,7 @@ export async function POST(req: NextRequest) {
     user_id: userDbId,
     event_name: eventName,
     properties: body?.props || {},
-    created_at: body?.ts ? new Date(body.ts).toISOString() : new Date().toISOString(),
+    created_at: new Date().toISOString(),
   });
 
   if (error) {

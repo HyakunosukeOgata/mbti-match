@@ -1,7 +1,10 @@
 import { supabase } from './supabase';
 
 function dataUrlToBlob(dataUrl: string) {
-  const [header, base64] = dataUrl.split(',');
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex === -1) throw new Error('Invalid data URL');
+  const header = dataUrl.slice(0, commaIndex);
+  const base64 = dataUrl.slice(commaIndex + 1);
   const mimeMatch = header.match(/data:(.*?);base64/);
   const mimeType = mimeMatch?.[1] || 'image/jpeg';
   const binary = atob(base64);
@@ -102,16 +105,18 @@ export async function syncProfilePhotos({
     return uploadedUrls.shift() || photo;
   });
 
+  // Delete old rows then insert new ones
   await supabase.from('user_photos').delete().eq('user_id', userDbId);
 
   if (finalUrls.length > 0) {
-    await supabase.from('user_photos').insert(
+    const { error: insertError } = await supabase.from('user_photos').insert(
       finalUrls.map((url, sortOrder) => ({
         user_id: userDbId,
         url,
         sort_order: sortOrder,
       }))
     );
+    if (insertError) throw insertError;
   }
 
   return finalUrls;

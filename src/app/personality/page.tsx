@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { ArrowRight, RefreshCw, Sparkles } from 'lucide-react';
 import { track } from '@/lib/analytics';
+import { getAttachmentStyleLabel, getConflictStyleLabel, getLifePaceLabel } from '@/lib/personality-labels';
 
 function getEnergyLabel(value: number) {
   if (value >= 70) return '高';
@@ -68,6 +69,9 @@ export default function PersonalityPage() {
             <p className="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Mochi 默契檔案</p>
             <h1 className="text-2xl font-bold mb-2">{currentUser.name || '你'}在關係裡的樣子</h1>
             <p className="text-sm text-text-secondary leading-relaxed">{personality.bio}</p>
+            {isOnboardingFlow && (
+              <p className="text-xs text-text-secondary mt-3">這是聊天後的人格摘要，正式公開自介會在你補完基本資料後生成。</p>
+            )}
           </div>
         </div>
 
@@ -122,11 +126,11 @@ export default function PersonalityPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-2xl p-3" style={{ background: 'var(--bg-input)' }}>
                 <p className="text-[11px] text-text-secondary mb-1">依附風格</p>
-                <p className="text-sm font-medium">{scoring.attachmentStyle}</p>
+                <p className="text-sm font-medium">{getAttachmentStyleLabel(scoring.attachmentStyle)}</p>
               </div>
               <div className="rounded-2xl p-3" style={{ background: 'var(--bg-input)' }}>
                 <p className="text-[11px] text-text-secondary mb-1">衝突處理</p>
-                <p className="text-sm font-medium">{scoring.conflictStyle}</p>
+                <p className="text-sm font-medium">{getConflictStyleLabel(scoring.conflictStyle)}</p>
               </div>
               <div className="rounded-2xl p-3" style={{ background: 'var(--bg-input)' }}>
                 <p className="text-[11px] text-text-secondary mb-1">社交能量</p>
@@ -142,7 +146,7 @@ export default function PersonalityPage() {
               </div>
               <div className="rounded-2xl p-3" style={{ background: 'var(--bg-input)' }}>
                 <p className="text-[11px] text-text-secondary mb-1">生活節奏</p>
-                <p className="text-sm font-medium">{scoring.lifePace}</p>
+                <p className="text-sm font-medium">{getLifePaceLabel(scoring.lifePace)}</p>
               </div>
             </div>
           </div>

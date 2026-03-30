@@ -34,6 +34,16 @@ export async function sendEmailOtp(email: string) {
   return { data, error };
 }
 
+export async function sendPhoneOtp(phone: string) {
+  const { data, error } = await supabase.auth.signInWithOtp({ phone });
+  return { data, error };
+}
+
+export async function verifyPhoneOtp(phone: string, token: string) {
+  const { data, error } = await supabase.auth.verifyOtp({ phone, token, type: 'sms' });
+  return { data, error };
+}
+
 export async function signOut() {
   const { error } = await supabase.auth.signOut();
   return { error };

@@ -4,10 +4,10 @@ import { useApp } from '@/lib/store';
 import { getMessagePreview } from '@/lib/chat-message';
 import { getCompatibilityInsight } from '@/lib/matching';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import BottomNav from '@/components/BottomNav';
 import PhotoGallery from '@/components/PhotoGallery';
-import { MessageCircle, Sparkles, Flame } from 'lucide-react';
+import { MessageCircle, Sparkles, Flame, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { track } from '@/lib/analytics';
 
@@ -26,31 +26,15 @@ function formatRelativeTime(date: Date): string {
   return date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
 }
 
-function getExpiryInfo(createdAt: string, hasMessages: boolean): { expired: boolean; urgentText: string | null; hoursLeft: number; progress: number } {
-  if (hasMessages) return { expired: false, urgentText: null, hoursLeft: Infinity, progress: 1 };
+function getExpiryInfo(createdAt: string, hasMessages: boolean): { expired: boolean; urgentText: string | null; hoursLeft: number } {
+  if (hasMessages) return { expired: false, urgentText: null, hoursLeft: Infinity };
   const diff = Date.now() - new Date(createdAt).getTime();
   const hoursElapsed = diff / (1000 * 60 * 60);
   const hoursLeft = MATCH_EXPIRY_HOURS - hoursElapsed;
-  const progress = Math.max(0, Math.min(1, hoursLeft / MATCH_EXPIRY_HOURS));
-  if (hoursLeft <= 0) return { expired: true, urgentText: '已過期', hoursLeft: 0, progress: 0 };
-  if (hoursLeft <= 12) return { expired: false, urgentText: `剩 ${Math.ceil(hoursLeft)} 小時`, hoursLeft, progress };
-  if (hoursLeft <= 24) return { expired: false, urgentText: `剩不到 1 天`, hoursLeft, progress };
-  return { expired: false, urgentText: null, hoursLeft, progress };
-}
-
-function ExpiryRing({ progress, size = 28 }: { progress: number; size?: number }) {
-  const r = (size - 4) / 2;
-  const circ = 2 * Math.PI * r;
-  const offset = circ * (1 - progress);
-  const color = progress > 0.5 ? '#52C485' : progress > 0.2 ? '#F5A623' : '#FF5A5A';
-  return (
-    <svg width={size} height={size} className="shrink-0 -rotate-90">
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth={2.5} />
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={2.5}
-        strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
-        style={{ transition: 'stroke-dashoffset 0.5s ease' }} />
-    </svg>
-  );
+  if (hoursLeft <= 0) return { expired: true, urgentText: '已過期', hoursLeft: 0 };
+  if (hoursLeft <= 12) return { expired: false, urgentText: `剩 ${Math.ceil(hoursLeft)} 小時`, hoursLeft };
+  if (hoursLeft <= 24) return { expired: false, urgentText: `剩不到 1 天`, hoursLeft };
+  return { expired: false, urgentText: null, hoursLeft };
 }
 
 export default function MatchesPage() {
@@ -62,7 +46,7 @@ export default function MatchesPage() {
     if (!currentUser) {
       router.replace('/');
     } else if (!currentUser.onboardingComplete) {
-      router.replace(currentUser.aiPersonality ? '/personality' : '/onboarding/ai-chat');
+      router.replace('/onboarding/ai-chat');
     } else {
       track('page_view', { page: 'matches' });
     }
@@ -75,18 +59,6 @@ export default function MatchesPage() {
     const expiry = getExpiryInfo(m.createdAt, m.messages.length > 0);
     return !expiry.expired;
   });
-
-  // Precompute insights for matches without messages (need "破冰提示")
-  const insightHints = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const m of activeMatches) {
-      if (m.messages.length === 0 && m.otherUser && currentUser) {
-        const insight = getCompatibilityInsight(currentUser, m.otherUser);
-        if (insight.starters[0]) map.set(m.id, insight.starters[0]);
-      }
-    }
-    return map;
-  }, [activeMatches, currentUser]);
 
   return (
     <div className="min-h-dvh pb-24">
@@ -131,6 +103,7 @@ export default function MatchesPage() {
           const unread = match.messages.some((message) => message.senderId !== currentUser.id && !message.readAt);
           const compat = match.compatibility || 0;
           const expiry = getExpiryInfo(match.createdAt, match.messages.length > 0);
+          const insight = getCompatibilityInsight(currentUser, otherUser);
 
           return (
             <Link
@@ -160,9 +133,9 @@ export default function MatchesPage() {
                     ? `你: ${getMessagePreview(lastMsg, true)}`
                     : getMessagePreview(lastMsg) || '開始聊天'}
                 </p>
-                {!lastMsg && (
+                {!lastMsg && insight.starters.length > 0 && (
                   <p className="text-[11px] text-text-secondary truncate mt-1">
-                    破冰提示：{insightHints.get(match.id) || '從今天的話題開始聊吧'}
+                    破冰提示：{insight.starters[0]}
                   </p>
                 )}
               </div>
@@ -178,15 +151,10 @@ export default function MatchesPage() {
                     : ''}
                 </div>
                 {expiry.urgentText && (
-                  <div className="flex items-center gap-1">
-                    <ExpiryRing progress={expiry.progress} size={22} />
-                    <span className="text-[10px] font-semibold" style={{ color: expiry.progress > 0.2 ? 'var(--warning)' : 'var(--danger)' }}>
-                      {expiry.urgentText}
-                    </span>
+                  <div className="flex items-center gap-1 text-[10px] font-semibold text-warning">
+                    <AlertTriangle size={10} />
+                    {expiry.urgentText}
                   </div>
-                )}
-                {!expiry.urgentText && !lastMsg && expiry.progress < 1 && (
-                  <ExpiryRing progress={expiry.progress} size={22} />
                 )}
               </div>
             </Link>

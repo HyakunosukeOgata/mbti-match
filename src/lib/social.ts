@@ -54,10 +54,6 @@ export interface DbMatchRow {
   topic_answers: Record<string, string> | null;
   compatibility: number | null;
   status: 'active' | 'expired' | 'removed';
-  scoring_breakdown: Record<string, number> | null;
-  matched_signals: string[] | null;
-  caution_signals: string[] | null;
-  recommendation_reasons: { reasons: string[]; caution: string | null } | null;
   created_at: string;
 }
 
@@ -73,10 +69,6 @@ export interface DbDailyCardRow {
   liked: boolean | null;
   skipped: boolean | null;
   card_date: string;
-  scoring_breakdown: Record<string, number> | null;
-  matched_signals: string[] | null;
-  caution_signals: string[] | null;
-  recommendation_reasons: { reasons: string[]; caution: string | null } | null;
   created_at: string;
 }
 
@@ -189,9 +181,6 @@ export function mapDailyCardRow(row: DbDailyCardRow, targetUser: UserProfile): D
     expiresAt: row.expires_at,
     liked: row.liked ?? false,
     skipped: row.skipped ?? false,
-    recommendationReasons: row.recommendation_reasons ?? null,
-    matchedSignals: row.matched_signals ?? [],
-    cautionSignals: row.caution_signals ?? [],
   };
 }
 

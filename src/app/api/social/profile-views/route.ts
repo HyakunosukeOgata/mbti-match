@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
 
   const rl = rateLimit('profile-view', authUser.id, 100, 3600_000);
   if (!rl.allowed) {
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ error: '操作太頻繁' }, { status: 429 });
   }
 
   const body = await req.json().catch(() => null);

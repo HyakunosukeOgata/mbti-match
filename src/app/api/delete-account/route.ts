@@ -51,14 +51,25 @@ export async function POST(req: NextRequest) {
   // Delete user row from `users` table
   await adminClient.from('users').delete().eq('auth_id', user.id);
 
-  // Delete user photos from storage
-  const { data: photos } = await adminClient.storage
-    .from('user-photos')
-    .list(user.id);
-  if (photos && photos.length > 0) {
-    await adminClient.storage
-      .from('user-photos')
-      .remove(photos.map(p => `${user.id}/${p.name}`));
+  // Delete user photos from storage (including nested chat/ subfolders)
+  const foldersToScan = [user.id];
+  const allFiles: string[] = [];
+  while (foldersToScan.length > 0) {
+    const folder = foldersToScan.pop()!;
+    const { data: items } = await adminClient.storage.from('user-photos').list(folder);
+    if (items) {
+      for (const item of items) {
+        const fullPath = `${folder}/${item.name}`;
+        if (item.id) {
+          allFiles.push(fullPath);
+        } else {
+          foldersToScan.push(fullPath);
+        }
+      }
+    }
+  }
+  if (allFiles.length > 0) {
+    await adminClient.storage.from('user-photos').remove(allFiles);
   }
 
   // Delete auth user LAST — only after all data is cleaned up

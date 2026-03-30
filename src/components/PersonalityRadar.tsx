@@ -81,7 +81,7 @@ export default function PersonalityRadar({ features, size = 180 }: Props) {
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="個性雷達圖">
         {/* Grid rings */}
         {rings.map((scale) => (
           <polygon

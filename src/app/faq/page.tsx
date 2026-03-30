@@ -16,11 +16,11 @@ const sections: { title: string; icon: string; items: FAQItem[] }[] = [
     items: [
       {
         q: '如何開始使用 Mochi 默契？',
-        a: '1. 選擇登入方式（Gmail 或 Apple）\n2. 跟小默聊五分鐘，讓系統了解你的個性\n3. 填寫個人資料與照片\n\n完成後系統每天會推薦契合的對象給你！',
+        a: '1. 選擇登入方式（手機、Gmail 或 Apple）\n2. 與 AI 聊天五分鐘，讓系統了解你的個性\n3. 填寫個人資料與照片\n\n完成後系統每天會推薦契合的對象給你！',
       },
       {
         q: '如何提高配對成功率？',
-        a: '• 上傳清晰的個人照片（最多 6 張）\n• 認真填寫自我介紹\n• 認真跟小默聊天，系統會根據你的個性計算契合度\n• 在今日話題中寫出有深度的回答',
+        a: '• 上傳清晰的個人照片（最多 6 張）\n• 認真填寫自我介紹\n• 認真跟 AI 聊天，系統會根據你的個性計算契合度\n• 在今日話題中寫出有深度的回答',
       },
       {
         q: '每天可以看到幾位推薦？',
@@ -38,7 +38,7 @@ const sections: { title: string; icon: string; items: FAQItem[] }[] = [
       },
       {
         q: '配對度是怎麼計算的？',
-        a: '配對度基於分析兩人的個性、價值觀和溝通風格的匹配程度。配對度越高，代表你們在生活方式和價值觀上越契合。',
+        a: '配對度基於 AI 分析兩人的個性、價值觀和溝通風格的匹配程度。配對度越高，代表你們在生活方式和價值觀上越契合。',
       },
       {
         q: '為什麼我要先回答話題才能送出喜歡？',
@@ -99,6 +99,7 @@ function Accordion({ item }: { item: FAQItem }) {
       <button
         className="w-full flex items-center justify-between py-4 text-left gap-3"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
       >
         <span className="text-sm font-medium text-text">{item.q}</span>
         <ChevronDown

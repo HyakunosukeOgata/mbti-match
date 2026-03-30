@@ -78,8 +78,8 @@ export default function SupportPage() {
         </div>
 
         <div className="glass-card !p-4">
-          <h3 className="font-semibold text-text text-sm mb-1">可以重新進行個性分析嗎？</h3>
-          <p className="text-sm text-text-secondary">可以。進入設定頁面，選擇「重新聊天分析」即可重新進行個性分析。</p>
+          <h3 className="font-semibold text-text text-sm mb-1">可以重新進行 AI 分析嗎？</h3>
+          <p className="text-sm text-text-secondary">可以。進入設定頁面，選擇「重新 AI 聊天分析」即可重新進行個性分析。</p>
         </div>
 
         <div className="glass-card !p-4">

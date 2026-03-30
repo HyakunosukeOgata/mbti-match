@@ -14,9 +14,9 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://mochi-match.com'),
-  title: "Mochi 默契 - 一起找到對的人",
-  description: "Mochi 默契 — 深度了解你的個性，找到最適合你的另一半。台灣最有默契的交友 APP。",
-  keywords: ["Mochi", "默契", "配對", "交友", "性格配對", "個性分析", "台灣交友", "交友APP"],
+  title: "Mochi 默契 - AI 智慧配對交友 | 找到最有默契的另一半",
+  description: "Mochi 默契 — AI 智慧個性分析配對交友平台。透過 AI 聊天深度了解你的個性，找到最適合你的另一半。台灣最有默契的交友 APP。",
+  keywords: ["Mochi", "默契", "AI配對", "AI交友", "性格配對", "個性分析", "智慧配對", "台灣交友", "交友APP"],
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -24,8 +24,8 @@ export const metadata: Metadata = {
     title: "Mochi 默契",
   },
   openGraph: {
-    title: "Mochi 默契 - 一起找到對的人",
-    description: "Mochi 默契 — 深度了解你的個性，找到最有默契的另一半",
+    title: "Mochi 默契 - AI 智慧配對，找到對的人",
+    description: "Mochi 默契 — 透過 AI 個性分析智慧配對，找到最有默契的另一半",
     type: "website",
     locale: "zh_TW",
     url: "https://mochi-match.com",
@@ -33,8 +33,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Mochi 默契 - 一起找到對的人",
-    description: "深度了解你的個性，找到最有默契的另一半",
+    title: "Mochi 默契 - AI 智慧配對交友",
+    description: "透過 AI 個性分析智慧配對，找到最有默契的另一半",
   },
   alternates: {
     canonical: "https://mochi-match.com",

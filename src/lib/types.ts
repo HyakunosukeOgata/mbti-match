@@ -4,7 +4,7 @@
 
 // AI 對話分析產生的人格向量
 export interface AIPersonality {
-  bio: string;                  // AI 生成的自我介紹
+  bio: string;                  // AI 整理的人格摘要，正式公開自介在 profile 完成後生成
   // --- Personality Profile ---
   traits: PersonalityTrait[];   // 人格特質標籤
   values: string[];             // 核心價值觀 (e.g. '真誠', '自由', '成長')
@@ -48,6 +48,12 @@ export interface UserProfile {
   profileVisible?: boolean;
   gender: 'male' | 'female' | 'other';
   bio: string;
+  occupation?: string;
+  interests?: string[];
+  heightCm?: number;
+  weightKg?: number;
+  education?: string;
+  pets?: string[];
   photos: string[];
   aiPersonality?: AIPersonality;
   preferences: {

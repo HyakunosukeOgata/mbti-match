@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   const blockedIds = blockedRows.map(r => r.blocked_id);
   const { data: users } = await adminClient
     .from('users')
-    .select('id, name, photos:ai_personality')
+    .select('id, name')
     .in('id', blockedIds);
 
   const userMap = new Map((users || []).map(u => [u.id, u]));

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash } from 'crypto';
+import { createHash, timingSafeEqual } from 'crypto';
 import { createServerClient } from '@/lib/supabase-server';
 import { rateLimit } from '@/lib/rate-limit';
 import { loadProfilesByDbIds, mapDailyCardRow, mapMatchRow, type DbDailyCardRow, type DbLikeRow, type DbMatchRow, type DbMessageRow } from '@/lib/social';
@@ -41,7 +41,10 @@ function isAuthorized(req: NextRequest) {
   const code = req.headers.get('x-admin-code') || '';
   const expected = process.env.ADMIN_CODE_HASH || '';
   if (!code || !expected) return false;
-  return hashCode(code) === expected;
+  const hashBuf = Buffer.from(hashCode(code));
+  const expectedBuf = Buffer.from(expected);
+  if (hashBuf.length !== expectedBuf.length) return false;
+  return timingSafeEqual(hashBuf, expectedBuf);
 }
 
 export async function GET(req: NextRequest) {
@@ -178,6 +181,9 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json().catch(() => null) as { reportId?: string; status?: 'reviewed' | 'dismissed' } | null;
   if (!body?.reportId || !body?.status) {
     return NextResponse.json({ error: '缺少必要欄位' }, { status: 400 });
+  }
+  if (!['reviewed', 'dismissed'].includes(body.status)) {
+    return NextResponse.json({ error: '無效的狀態值' }, { status: 400 });
   }
 
   const adminClient = createServerClient();

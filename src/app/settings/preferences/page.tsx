@@ -36,7 +36,7 @@ export default function PreferencesPage() {
     if (!currentUser) {
       router.replace('/');
     } else if (!currentUser.onboardingComplete) {
-      router.replace(currentUser.aiPersonality ? '/personality' : '/onboarding/ai-chat');
+      router.replace('/onboarding/ai-chat');
     } else {
       track('page_view', { page: 'preferences' });
     }
@@ -56,16 +56,20 @@ export default function PreferencesPage() {
     const clampedMax = Math.max(clampedMin, Math.min(60, Math.max(ageMin, ageMax)));
     setAgeMin(clampedMin);
     setAgeMax(clampedMax);
-    await updateProfile({
-      preferences: {
-        ageMin: clampedMin,
-        ageMax: clampedMax,
-        genderPreference: genderPref as ('male' | 'female' | 'other')[],
-        region,
-        preferredRegions: preferredRegions.length > 0 ? preferredRegions : undefined,
-      },
-    });
-    setToast('✅ 已儲存');
+    try {
+      await updateProfile({
+        preferences: {
+          ageMin: clampedMin,
+          ageMax: clampedMax,
+          genderPreference: genderPref as ('male' | 'female' | 'other')[],
+          region,
+          preferredRegions: preferredRegions.length > 0 ? preferredRegions : undefined,
+        },
+      });
+      setToast('✅ 已儲存');
+    } catch {
+      setToast('❌ 儲存失敗');
+    }
     setTimeout(() => setToast(''), 2000);
   };
 
@@ -137,30 +141,34 @@ export default function PreferencesPage() {
 
         <div>
           <label className="text-sm font-semibold text-text mb-3 block">📍 希望配對的縣市</label>
-          <div className="grid grid-cols-3 gap-2">
-            {TAIWAN_CITIES.map(r => {
-              const selected = preferredRegions.includes(r);
-              return (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setPreferredRegions(prev => selected ? prev.filter(x => x !== r) : [...prev, r])}
-                  className="py-2 px-3 rounded-xl text-sm font-medium transition-all"
-                  style={{
-                    background: selected ? 'var(--primary)' : 'var(--bg-input)',
-                    color: selected ? '#fff' : 'var(--text)',
-                    border: selected ? '1.5px solid var(--primary)' : '1.5px solid var(--border)',
-                  }}
-                >
-                  {r}
-                </button>
-              );
-            })}
-          </div>
+          <select
+            multiple
+            value={preferredRegions}
+            onChange={(e) => {
+              const selected = Array.from(e.target.selectedOptions, opt => opt.value);
+              setPreferredRegions(selected);
+            }}
+            className="w-full rounded-xl text-sm"
+            style={{ minHeight: 180, padding: '8px', border: '1.5px solid var(--border)', background: 'var(--bg-input)' }}
+          >
+            {TAIWAN_CITIES.map(r => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
           {preferredRegions.length > 0 && (
-            <p className="text-xs text-primary mt-2">已選 {preferredRegions.length} 個縣市</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {preferredRegions.map(r => (
+                <span key={r} className="inline-flex items-center gap-1 text-xs py-1 px-2.5 rounded-full font-medium" style={{ background: 'rgba(255,140,107,0.1)', color: 'var(--primary)' }}>
+                  {r}
+                  <button onClick={() => setPreferredRegions(prev => prev.filter(x => x !== r))} className="hover:text-danger">✕</button>
+                </span>
+              ))}
+            </div>
           )}
-          <p className="text-xs text-text-secondary mt-1 opacity-60">不選 = 不限地區</p>
+          {preferredRegions.length > 0 && (
+            <p className="text-xs text-primary mt-1">已選 {preferredRegions.length} 個縣市</p>
+          )}
+          <p className="text-xs text-text-secondary mt-1 opacity-60">按住 Cmd/Ctrl 可複選，不選 = 不限地區</p>
         </div>
 
         {/* Info */}

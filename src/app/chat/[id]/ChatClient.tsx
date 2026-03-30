@@ -31,7 +31,6 @@ export default function ChatClient({ matchId }: { matchId: string }) {
   const [showPhotoConsent, setShowPhotoConsent] = useState(false);
   const [photoConsentStatus, setPhotoConsentStatus] = useState<PhotoConsentStatus>('none');
   const [photoConsentRequester, setPhotoConsentRequester] = useState<string | null>(null);
-  const [dbStarters, setDbStarters] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const REPORT_REASONS = ['不當言行', '假帳號 / 詐騙', '騷擾或威脅', '不雅照片', '未成年', '其他'];
@@ -51,7 +50,7 @@ export default function ChatClient({ matchId }: { matchId: string }) {
     if (!currentUser) {
       router.replace('/');
     } else if (!currentUser.onboardingComplete) {
-      router.replace(currentUser.aiPersonality ? '/personality' : '/onboarding/ai-chat');
+      router.replace('/onboarding/ai-chat');
     } else {
       track('page_view', { page: 'chat' });
     }
@@ -77,27 +76,34 @@ export default function ChatClient({ matchId }: { matchId: string }) {
   const handleBlock = async () => {
     if (!session?.access_token) return;
 
-    const response = await fetch('/api/social/matches', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ matchId, action: 'block' }),
-    });
+    try {
+      const response = await fetch('/api/social/matches', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ matchId, action: 'block' }),
+      });
 
-    setConfirmAction(null);
-    setShowReport(false);
+      setConfirmAction(null);
+      setShowReport(false);
 
-    if (!response.ok) {
-      setReportToast('操作失敗，請稍後再試');
+      if (!response.ok) {
+        setReportToast('操作失敗，請稍後再試');
+        setTimeout(() => setReportToast(''), 2500);
+        return;
+      }
+
+      setReportToast('已離開對話');
       setTimeout(() => setReportToast(''), 2500);
-      return;
+      router.push('/matches');
+    } catch {
+      setConfirmAction(null);
+      setShowReport(false);
+      setReportToast('網路錯誤，請稍後再試');
+      setTimeout(() => setReportToast(''), 2500);
     }
-
-    setReportToast('已離開對話');
-    setTimeout(() => setReportToast(''), 2500);
-    router.push('/matches');
   };
 
   useEffect(() => {
@@ -132,21 +138,6 @@ export default function ChatClient({ matchId }: { matchId: string }) {
     };
   }, [currentUser?.dbId, match, matchId]);
 
-  // Load AI-generated conversation starters from DB
-  useEffect(() => {
-    if (!matchId || !isUuidLike(matchId)) return;
-    supabase
-      .from('conversation_starters')
-      .select('starters')
-      .eq('match_id', matchId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.starters && Array.isArray(data.starters) && data.starters.length > 0) {
-          setDbStarters(data.starters);
-        }
-      });
-  }, [matchId]);
-
   if (!isUuidLike(matchId)) {
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center gap-4">
@@ -177,9 +168,15 @@ export default function ChatClient({ matchId }: { matchId: string }) {
     }
 
     setSending(true);
-    await sendMessage(matchId, { text: input.trim() });
-    setInput('');
-    setSending(false);
+    try {
+      await sendMessage(matchId, { text: input.trim() });
+      setInput('');
+    } catch {
+      setReportToast('訊息送出失敗，請稍後再試');
+      setTimeout(() => setReportToast(''), 2500);
+    } finally {
+      setSending(false);
+    }
   };
 
   const useStarter = (starter: string) => {
@@ -221,39 +218,24 @@ export default function ChatClient({ matchId }: { matchId: string }) {
   };
 
   const submitReport = async () => {
-    if (!currentUser.dbId || !otherUser.dbId || !reportReason || !session?.access_token) return;
+    if (!currentUser.dbId || !otherUser.dbId || !reportReason) return;
 
-    try {
-      const res = await fetch('/api/social/report', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          reportedUserDbId: otherUser.dbId,
-          matchId,
-          reason: reportReason,
-        }),
-      });
+    const { error } = await supabase.from('reports').insert({
+      reporter_id: currentUser.dbId,
+      reported_user_id: otherUser.dbId,
+      match_id: matchId,
+      reason: reportReason,
+    });
 
-      setConfirmAction(null);
-      setShowReport(false);
-      setReportReason('');
-
-      if (res.ok) {
-        setReportToast('已收到你的檢舉，我們會儘快處理');
-        track('report_user', { reportedUserId: otherUser.id, reason: reportReason });
-      } else {
-        setReportToast('送出檢舉失敗，請稍後再試');
-      }
-    } catch {
-      setConfirmAction(null);
-      setShowReport(false);
-      setReportReason('');
-      setReportToast('送出檢舉失敗，請稍後再試');
-    }
+    setConfirmAction(null);
+    setShowReport(false);
+    setReportReason('');
+    setReportToast(error ? '送出檢舉失敗，請稍後再試' : '已收到你的檢舉，我們會儘快處理');
     setTimeout(() => setReportToast(''), 3000);
+
+    if (!error) {
+      track('report_user', { reportedUserId: otherUser.id, reason: reportReason });
+    }
   };
 
   const requestPhotoConsent = async () => {
@@ -403,7 +385,7 @@ export default function ChatClient({ matchId }: { matchId: string }) {
                 ))}
               </div>
               <div className="flex flex-wrap gap-2">
-                {(dbStarters.length > 0 ? dbStarters : insight.starters).map((starter) => (
+                {insight.starters.map((starter) => (
                   <button
                     key={starter}
                     type="button"
@@ -419,28 +401,8 @@ export default function ChatClient({ matchId }: { matchId: string }) {
         )}
 
         {match.messages.length === 0 && (
-          <div className="animate-fade-in space-y-3 py-2">
-            <div className="flex justify-center">
-              <div className="chat-bubble system">🎉 配對成功！{insight?.summary || '從今天的話題開始聊聊吧。'}</div>
-            </div>
-            {(() => { const starters = dbStarters.length > 0 ? dbStarters : (insight?.starters || []); return starters.length > 0; })() && (
-              <div className="px-2">
-                <p className="text-xs text-text-secondary text-center mb-2">{dbStarters.length > 0 ? '✨ AI 為你準備的開場白：' : '不知道說什麼？試試這些開場：'}</p>
-                <div className="space-y-2">
-                  {(dbStarters.length > 0 ? dbStarters : (insight?.starters || [])).map((starter) => (
-                    <button
-                      key={starter}
-                      type="button"
-                      className="w-full text-left text-sm px-4 py-3 rounded-2xl transition-all active:scale-[0.98]"
-                      style={{ background: 'rgba(255,140,107,0.08)', border: '1px solid rgba(255,140,107,0.15)' }}
-                      onClick={() => useStarter(starter)}
-                    >
-                      💬 {starter}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+          <div className="flex justify-center animate-fade-in py-2">
+            <div className="chat-bubble system">🎉 配對成功！{insight?.summary || '從今天的話題開始聊聊吧。'}</div>
           </div>
         )}
         {match.messages.map((msg, index) => {
@@ -499,7 +461,7 @@ export default function ChatClient({ matchId }: { matchId: string }) {
       <div className="px-4 pt-3 flex gap-2.5 items-end" style={{ background: '#FFFFFF', borderTop: '1px solid #F2E8E0', paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' }}>
         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void handlePickImage(e); }} />
         <button
-          aria-label="照片交換權限"
+          aria-label={photoConsentStatus === 'approved' ? '上傳照片' : photoConsentStatus === 'requested' && photoConsentRequester === currentUser.dbId ? '等待對方回應' : '申請照片交換'}
           onClick={() => {
             if (photoConsentStatus === 'approved') {
               fileInputRef.current?.click();
@@ -545,14 +507,14 @@ export default function ChatClient({ matchId }: { matchId: string }) {
       </div>
 
       {moderationWarning && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 animate-slide-up" role="alert" aria-live="assertive">
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[60] animate-slide-up" role="alert" aria-live="assertive">
           <div className="px-5 py-3 rounded-2xl shadow-lg text-white text-sm font-medium" style={{ background: 'rgba(220, 38, 38, 0.9)' }}>
             ⚠️ {moderationWarning}
           </div>
         </div>
       )}
 
-      {reportToast && (
+      {reportToast && !moderationWarning && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 animate-slide-up" role="status" aria-live="polite">
           <div className="px-5 py-3 rounded-2xl shadow-lg text-white text-sm font-medium" style={{ background: 'rgba(30,30,30,0.9)' }}>
             {reportToast}
