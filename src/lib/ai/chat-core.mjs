@@ -153,7 +153,9 @@ export function evaluateChatReadiness(messages) {
   return {
     substantialAnswerCount: substantialAnswers.length,
     dimensionCount: dimensionHits.size,
-    isReady: substantialAnswers.length >= 6 && dimensionHits.size >= 4,
+    // Auto-detect: enough substantial answers is sufficient;
+    // dimension keyword matching is a bonus signal, not a gate
+    isReady: substantialAnswers.length >= 6,
   };
 }
 
@@ -161,9 +163,12 @@ export function enforceChatEnvelope(parsed, messages) {
   if (!parsed?.message) return null;
 
   const readiness = evaluateChatReadiness(messages);
+  // Trust AI's readyToAnalyze when user has given enough substantial answers (>=5).
+  // This prevents blocking when AI uses different wording than DIMENSION_RULES keywords.
+  const hasEnoughContent = readiness.substantialAnswerCount >= 5;
   return {
     message: parsed.message,
-    readyToAnalyze: parsed.readyToAnalyze === true && readiness.isReady,
+    readyToAnalyze: parsed.readyToAnalyze === true && hasEnoughContent,
   };
 }
 
