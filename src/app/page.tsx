@@ -10,7 +10,8 @@ import { signInWithOAuth, sendPhoneOtp, signInWithPassword, verifyPhoneOtp } fro
 export default function LoginPage() {
   const { isLoggedIn, authReady, currentUser, onboardingStep } = useApp();
   const router = useRouter();
-  const demoEnabled = process.env.NODE_ENV !== 'production';
+  const [testMode, setTestMode] = useState(false);
+  const demoEnabled = process.env.NODE_ENV !== 'production' || testMode;
 
   const [step, setStep] = useState<'main' | 'methods' | 'phone'>('main');
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -23,6 +24,12 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [countdown, setCountdown] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('test')) {
+      setTestMode(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (!authReady) return;
@@ -123,9 +130,15 @@ export default function LoginPage() {
     setLoading('demo');
     setError('');
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (testMode) {
+        const code = prompt('請輸入測試碼');
+        if (!code) { setLoading(''); return; }
+        headers['x-test-code'] = code;
+      }
       const response = await fetch('/api/dev-login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ name: demoName.trim() }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -178,8 +191,8 @@ export default function LoginPage() {
             {demoEnabled && (
               <div className="bg-white rounded-3xl p-5 space-y-3 shadow-sm" style={{ border: '1px solid #F2E8E0' }}>
                 <div>
-                  <p className="text-sm font-semibold text-text mb-1">快速體驗</p>
-                  <p className="text-xs text-text-secondary">僅限本地開發與測試使用，會直接建立一個體驗帳號。</p>
+                  <p className="text-sm font-semibold text-text mb-1">{testMode ? '測試登入' : '快速體驗'}</p>
+                  <p className="text-xs text-text-secondary">{testMode ? '輸入暱稱直接進入系統測試' : '僅限本地開發與測試使用，會直接建立一個體驗帳號。'}</p>
                 </div>
                 <input
                   type="text"
