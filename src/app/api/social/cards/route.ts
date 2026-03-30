@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase-server';
 import { getAuthenticatedUser } from '@/lib/server-auth';
 import { calculateCompatibility, getFullScoreResult, getDailyMatches, passesBasicFilters } from '@/lib/matching';
-import { generateFallbackReasons } from '@/lib/ai/recommendation-reasons';
+import { generateRecommendationReasons } from '@/lib/ai/recommendation-reasons';
 import { loadProfilesByDbIds, mapDailyCardRow, mapDbUserToProfile, pickRandomTopics, type DbDailyCardRow, type DbUserRow } from '@/lib/social';
 import { rateLimit } from '@/lib/rate-limit';
 
@@ -156,12 +156,19 @@ async function buildCards(adminClient: ReturnType<typeof createServerClient>, au
   await adminClient.from('daily_cards').delete().eq('user_id', meRow.id).eq('card_date', today);
 
   if (finalMatches.length > 0) {
-    await adminClient.from('daily_cards').insert(
-      finalMatches.map((profile, index) => {
+    const cardRows = await Promise.all(
+      finalMatches.map(async (profile, index) => {
         const pairTopic = profile.dbId ? existingPairCards.get(profile.dbId) : undefined;
         const result = getFullScoreResult(meProfile, profile);
         const { breakdown, matchedSignals, cautionSignals } = result;
-        const fallbackReasons = generateFallbackReasons(matchedSignals, cautionSignals);
+        const generatedReasons = await generateRecommendationReasons({
+          source: meProfile,
+          target: profile,
+          breakdown,
+          totalScore: result.totalScore,
+          matchedSignals,
+          cautionSignals,
+        });
         return {
           user_id: meRow.id,
           target_user_id: profile.dbId,
@@ -175,10 +182,12 @@ async function buildCards(adminClient: ReturnType<typeof createServerClient>, au
           scoring_breakdown: breakdown,
           matched_signals: matchedSignals,
           caution_signals: cautionSignals,
-          recommendation_reasons: fallbackReasons,
+          recommendation_reasons: generatedReasons,
         };
       })
     );
+
+    await adminClient.from('daily_cards').insert(cardRows);
   }
 
   return { cards: await loadCardsForUser(adminClient, meRow.id) };

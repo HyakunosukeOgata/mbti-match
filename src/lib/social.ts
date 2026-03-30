@@ -53,6 +53,9 @@ export interface DbMatchRow {
   topic_category: string | null;
   topic_answers: Record<string, string> | null;
   compatibility: number | null;
+  matched_signals?: string[] | null;
+  caution_signals?: string[] | null;
+  recommendation_reasons?: JsonObject | null;
   status: 'active' | 'expired' | 'removed';
   created_at: string;
 }
@@ -68,8 +71,26 @@ export interface DbDailyCardRow {
   expires_at: string;
   liked: boolean | null;
   skipped: boolean | null;
+  matched_signals?: string[] | null;
+  caution_signals?: string[] | null;
+  recommendation_reasons?: JsonObject | null;
   card_date: string;
   created_at: string;
+}
+
+function parseRecommendationPayload(value: JsonObject | null | undefined) {
+  if (!value || typeof value !== 'object') {
+    return { reasons: undefined, caution: null as string | null };
+  }
+
+  const reasons = Array.isArray(value.reasons)
+    ? value.reasons.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : undefined;
+  const caution = typeof value.caution === 'string' && value.caution.trim().length > 0
+    ? value.caution
+    : null;
+
+  return { reasons, caution };
 }
 
 export interface DbNotificationRow {
@@ -170,6 +191,8 @@ export function pickRandomTopics(count: number): ConversationTopic[] {
 }
 
 export function mapDailyCardRow(row: DbDailyCardRow, targetUser: UserProfile): DailyCard {
+  const recommendation = parseRecommendationPayload(row.recommendation_reasons);
+
   return {
     user: targetUser,
     compatibility: row.compatibility,
@@ -181,7 +204,11 @@ export function mapDailyCardRow(row: DbDailyCardRow, targetUser: UserProfile): D
     expiresAt: row.expires_at,
     liked: row.liked ?? false,
     skipped: row.skipped ?? false,
-  };
+    matchReasons: recommendation.reasons,
+    matchCaution: recommendation.caution,
+    matchedSignals: row.matched_signals || undefined,
+    cautionSignals: row.caution_signals || undefined,
+  } as DailyCard;
 }
 
 export function mapLikeRow(row: DbLikeRow, currentUserAuthId: string, profilesByDbId: Map<string, UserProfile>): LikeAction | null {
@@ -230,6 +257,7 @@ export function mapMatchRow(
       return [profile?.id || key, value];
     })
   );
+  const recommendation = parseRecommendationPayload(row.recommendation_reasons);
 
   return {
     id: row.id,
@@ -245,5 +273,9 @@ export function mapMatchRow(
     status: row.status,
     otherUser,
     compatibility: row.compatibility ?? undefined,
-  };
+    matchReasons: recommendation.reasons,
+    matchCaution: recommendation.caution,
+    matchedSignals: row.matched_signals || undefined,
+    cautionSignals: row.caution_signals || undefined,
+  } as Match;
 }

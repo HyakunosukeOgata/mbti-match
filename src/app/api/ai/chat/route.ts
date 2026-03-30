@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { rateLimit } from '@/lib/rate-limit';
-import { enforceChatEnvelope, evaluateChatReadiness } from '@/lib/ai/chat-core.mjs';
+import { enforceChatEnvelope, evaluateChatReadiness, normalizeAnalysis } from '@/lib/ai/chat-core.mjs';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -70,6 +70,85 @@ const ANALYSIS_PROMPT = `根據以下聊天記錄，分析這位用戶的個性�
 6. chatSummary: 2-3 句話概述這位用戶的性格（內部分析用，不公開）
 
 只回覆 JSON，不要包裹 markdown code block。`;
+
+const FINAL_PROFILE_PROMPT = `你是 Mochi 默契的個人檔案編輯與配對分析師。
+
+你會收到兩份資料：
+1. 使用者與 AI 的對話內容
+2. 使用者填寫的個人資料與配對偏好
+
+你的任務是把這些資訊整理成一份正式、可公開展示、也能用於配對的結構化檔案。
+
+輸出格式：嚴格 JSON，不要包 markdown code block
+{
+  "bio": "40-90 字，第一人稱，適合放在個人頁公開顯示",
+  "personality_profile": {
+    "traits": [
+      { "name": "慢熱", "score": 82, "category": "social" }
+    ],
+    "values": ["真誠", "成長", "自由"]
+  },
+  "dating_style": "一句話描述交往風格",
+  "communication_style": "一句話描述溝通方式",
+  "relationship_goal": "一句話描述關係期待",
+  "red_flags": ["情緒勒索", "不尊重界線"],
+  "tags": ["#慢熱", "#重視成長", "#生活感"],
+  "scoring_features": {
+    "attachmentStyle": "secure|anxious|avoidant|mixed",
+    "socialEnergy": 0-100,
+    "conflictStyle": "confronter|avoider|collaborator|compromiser",
+    "loveLanguage": "一句短詞",
+    "lifePace": "slow|moderate|fast",
+    "emotionalDepth": 0-100
+  },
+  "chatSummary": "2-3 句內部摘要，描述這個人的個性與相處節奏"
+}
+
+規則：
+- bio 必須融合聊天內容與個人資料，不能只重寫其中一邊
+- 如果使用者填了自我介紹草稿，請吸收資訊與語氣，但要重寫成更自然、完整的公開版本
+- traits、values、scoring_features 要能支撐後續配對
+- tags 要短、自然、適合 UI 顯示
+- 使用繁體中文
+- 不要出現「AI」「系統」「演算法」等字眼`;
+
+function buildFinalProfileContext(profile: Record<string, unknown>) {
+  const preferredRegions = Array.isArray(profile.preferredRegions)
+    ? profile.preferredRegions.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+  const genderPreference = Array.isArray(profile.genderPreference)
+    ? profile.genderPreference.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+
+  return [
+    `暱稱：${typeof profile.nickname === 'string' ? profile.nickname : ''}`,
+    `年齡：${typeof profile.age === 'number' ? profile.age : ''}`,
+    `性別：${typeof profile.gender === 'string' ? profile.gender : ''}`,
+    `所在地區：${typeof profile.region === 'string' ? profile.region : ''}`,
+    `照片數量：${typeof profile.photoCount === 'number' ? profile.photoCount : 0}`,
+    `自我介紹草稿：${typeof profile.bio === 'string' ? profile.bio : ''}`,
+    `希望對象性別：${genderPreference.join('、') || '不限'}`,
+    `希望對象年齡：${typeof profile.ageMin === 'number' && typeof profile.ageMax === 'number' ? `${profile.ageMin}-${profile.ageMax}` : ''}`,
+    `希望對象地區：${preferredRegions.join('、') || '不限'}`,
+  ].join('\n');
+}
+
+function mapNormalizedPersonality(normalized: ReturnType<typeof normalizeAnalysis>) {
+  if (!normalized) return null;
+
+  return {
+    bio: normalized.bio,
+    traits: normalized.personality_profile.traits,
+    values: normalized.personality_profile.values,
+    communicationStyle: normalized.communication_style,
+    relationshipGoal: normalized.relationship_goal,
+    chatSummary: normalized.chatSummary,
+    datingStyle: normalized.dating_style,
+    redFlags: normalized.red_flags,
+    tags: normalized.tags,
+    scoringFeatures: normalized.scoring_features,
+  };
+}
 
 interface GeminiContent {
   role: 'user' | 'model';
@@ -141,9 +220,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { messages, action } = body as {
+    const { messages, action, profile } = body as {
       messages: { role: 'user' | 'assistant'; content: string }[];
-      action: 'chat' | 'analyze';
+      action: 'chat' | 'analyze' | 'finalize';
+      profile?: Record<string, unknown>;
     };
 
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -175,6 +255,38 @@ export async function POST(request: NextRequest) {
       try {
         const parsed = JSON.parse(cleaned);
         return NextResponse.json({ personality: parsed });
+      } catch {
+        return NextResponse.json({ error: '分析格式錯誤', raw }, { status: 500 });
+      }
+    }
+
+    if (action === 'finalize') {
+      if (!profile || typeof profile !== 'object') {
+        return NextResponse.json({ error: '缺少個人資料' }, { status: 400 });
+      }
+
+      const conversationText = sanitizedMessages
+        .map(m => `${m.role === 'user' ? '用戶' : 'AI'}：${m.content}`)
+        .join('\n');
+      const profileContext = buildFinalProfileContext(profile);
+
+      const raw = await callGemini(
+        FINAL_PROFILE_PROMPT,
+        [{ role: 'user', parts: [{ text: `## 聊天紀錄\n${conversationText}\n\n## 個人資料\n${profileContext}` }] }],
+        0.6,
+        4096,
+      );
+
+      const cleaned = raw.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?\s*```\s*$/, '');
+
+      try {
+        const parsed = JSON.parse(cleaned);
+        const normalized = normalizeAnalysis(parsed);
+        const personality = mapNormalizedPersonality(normalized);
+        if (!personality) {
+          return NextResponse.json({ error: '分析格式錯誤', raw }, { status: 500 });
+        }
+        return NextResponse.json({ personality });
       } catch {
         return NextResponse.json({ error: '分析格式錯誤', raw }, { status: 500 });
       }

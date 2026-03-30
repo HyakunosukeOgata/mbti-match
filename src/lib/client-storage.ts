@@ -3,6 +3,7 @@ export const USER_SCOPED_STORAGE_KEYS = [
   'mbti-match-matches',
   'mbti-match-likes',
   'mbti-match-skipped',
+  'mochi_onboarding_chat',
   'mochi_notifications',
   'mochi_blocked_users',
   'mochi_blocked_names',
@@ -10,6 +11,8 @@ export const USER_SCOPED_STORAGE_KEYS = [
   'mochi_profile_visible',
   'mochi_hide_age',
 ] as const;
+
+export const ONBOARDING_CHAT_STORAGE_KEY = 'mochi_onboarding_chat';
 
 export function getUserScopedKey(baseKey: string, userId?: string | null) {
   return userId ? `${baseKey}:${userId}` : baseKey;

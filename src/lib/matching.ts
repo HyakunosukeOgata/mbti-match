@@ -14,8 +14,7 @@ export interface CompatibilityInsight {
  * 基於：AI 人格向量匹配
  */
 export function calculateCompatibility(me: UserProfile, other: UserProfile): number {
-  const raw = calculateAIPersonalityMatch(me, other);
-  return Math.max(35, Math.min(100, raw));
+  return scoreMatch(me, other).totalScore;
 }
 
 export function getCompatibilityInsight(me: UserProfile, other: UserProfile): CompatibilityInsight {

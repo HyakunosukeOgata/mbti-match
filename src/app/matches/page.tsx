@@ -96,6 +96,7 @@ export default function MatchesPage() {
         )}
 
         {activeMatches.map((match, idx) => {
+          const matchMeta = match as typeof match & { matchReasons?: string[] };
           const otherUser = match.otherUser;
           if (!otherUser) return null;
 
@@ -104,6 +105,7 @@ export default function MatchesPage() {
           const compat = match.compatibility || 0;
           const expiry = getExpiryInfo(match.createdAt, match.messages.length > 0);
           const insight = getCompatibilityInsight(currentUser, otherUser);
+          const matchHook = matchMeta.matchReasons?.[0] || insight.starters[0];
 
           return (
             <Link
@@ -133,9 +135,9 @@ export default function MatchesPage() {
                     ? `你: ${getMessagePreview(lastMsg, true)}`
                     : getMessagePreview(lastMsg) || '開始聊天'}
                 </p>
-                {!lastMsg && insight.starters.length > 0 && (
+                {!lastMsg && matchHook && (
                   <p className="text-[11px] text-text-secondary truncate mt-1">
-                    破冰提示：{insight.starters[0]}
+                    破冰提示：{matchHook}
                   </p>
                 )}
               </div>

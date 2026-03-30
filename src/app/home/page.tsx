@@ -208,9 +208,20 @@ export default function HomePage() {
         )}
 
         {dailyCards.filter(c => !c.skipped).map((card, idx) => {
+          const cardMeta = card as typeof card & {
+            matchReasons?: string[];
+            matchCaution?: string | null;
+            cautionSignals?: string[];
+          };
           const isExpanded = expandedCard === card.user.id;
           const compat = calculateCompatibility(currentUser, card.user);
           const insight = getCompatibilityInsight(currentUser, card.user);
+          const displayedReasons = cardMeta.matchReasons && cardMeta.matchReasons.length > 0
+            ? cardMeta.matchReasons
+            : insight.strengths;
+          const displayedCautions = cardMeta.cautionSignals && cardMeta.cautionSignals.length > 0
+            ? cardMeta.cautionSignals
+            : insight.watchouts;
 
           return (
             <div
@@ -358,16 +369,16 @@ export default function HomePage() {
                     <div>
                       <p className="text-xs font-semibold text-text-secondary mb-1.5">默契亮點</p>
                       <div className="space-y-1.5">
-                        {insight.strengths.map((item) => (
+                        {displayedReasons.map((item) => (
                           <p key={item} className="text-sm text-text leading-relaxed">• {item}</p>
                         ))}
                       </div>
                     </div>
-                    {insight.watchouts.length > 0 && (
+                    {(displayedCautions.length > 0 || cardMeta.matchCaution) && (
                       <div>
                         <p className="text-xs font-semibold text-text-secondary mb-1.5">先知道會更順</p>
                         <div className="space-y-1.5">
-                          {insight.watchouts.map((item) => (
+                          {[...(cardMeta.matchCaution ? [cardMeta.matchCaution] : []), ...displayedCautions].slice(0, 2).map((item) => (
                             <p key={item} className="text-sm text-text-secondary leading-relaxed">• {item}</p>
                           ))}
                         </div>

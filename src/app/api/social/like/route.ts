@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase-server';
 import { getAuthenticatedUser } from '@/lib/server-auth';
 import { calculateCompatibility, getFullScoreResult } from '@/lib/matching';
-import { generateFallbackReasons } from '@/lib/ai/recommendation-reasons';
+import { generateRecommendationReasons } from '@/lib/ai/recommendation-reasons';
 import { generateConversationStarters } from '@/lib/ai/conversation-starters';
 import { loadProfilesByDbIds, type DbLikeRow, type DbUserRow } from '@/lib/social';
 import { rateLimit } from '@/lib/rate-limit';
@@ -140,7 +140,14 @@ export async function POST(req: NextRequest) {
 
     const scoreResult = getFullScoreResult(currentProfile, targetProfile);
     const { breakdown, matchedSignals, cautionSignals } = scoreResult;
-    const reasons = generateFallbackReasons(matchedSignals, cautionSignals);
+    const reasons = await generateRecommendationReasons({
+      source: currentProfile,
+      target: targetProfile,
+      breakdown,
+      totalScore: scoreResult.totalScore,
+      matchedSignals,
+      cautionSignals,
+    });
 
     const { data: insertedMatch, error: matchError } = await adminClient
       .from('matches')

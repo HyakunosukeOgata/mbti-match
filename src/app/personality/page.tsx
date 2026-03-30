@@ -2,7 +2,7 @@
 
 import { useApp } from '@/lib/store';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowRight, RefreshCw, Sparkles } from 'lucide-react';
 import { track } from '@/lib/analytics';
 import { getAttachmentStyleLabel, getConflictStyleLabel, getLifePaceLabel } from '@/lib/personality-labels';
@@ -20,8 +20,9 @@ function getDepthLabel(value: number) {
 }
 
 export default function PersonalityPage() {
-  const { currentUser, authReady } = useApp();
+  const { currentUser, authReady, onboardingStep, setOnboardingStep, updateProfile } = useApp();
   const router = useRouter();
+  const [starting, setStarting] = useState(false);
 
   useEffect(() => {
     if (!authReady) return;
@@ -43,19 +44,28 @@ export default function PersonalityPage() {
   const tags = personality.tags && personality.tags.length > 0
     ? personality.tags
     : personality.values.slice(0, 6);
-  const isOnboardingFlow = !currentUser.onboardingComplete;
+  const isOnboardingFlow = !currentUser.onboardingComplete || onboardingStep >= 4;
+
+  const handleStartMatching = async () => {
+    if (starting) return;
+    setStarting(true);
+    track('onboarding_complete');
+    await updateProfile({ onboardingComplete: true });
+    setOnboardingStep(5);
+    router.push('/home');
+  };
 
   return (
     <div className="min-h-dvh flex flex-col px-6 py-8">
       {isOnboardingFlow && (
         <div className="mb-6">
           <div className="flex justify-between items-center mb-3">
-            <p className="text-sm font-medium text-text-secondary">✨ 步驟 3/4 · 你的默契檔案</p>
+            <p className="text-sm font-medium text-text-secondary">✨ 步驟 4/4 · 你的默契檔案</p>
           </div>
           <div className="progress-bar">
-            <div className="progress-bar-fill" style={{ width: '75%' }} />
+            <div className="progress-bar-fill" style={{ width: '100%' }} />
           </div>
-          <p className="text-xs text-text-secondary mt-2">先看看小默怎麼理解你，再補齊基本資料。</p>
+          <p className="text-xs text-text-secondary mt-2">這份介紹已整合聊天內容、個人資料與偏好，確認後就能開始探索配對。</p>
         </div>
       )}
 
@@ -70,7 +80,7 @@ export default function PersonalityPage() {
             <h1 className="text-2xl font-bold mb-2">{currentUser.name || '你'}在關係裡的樣子</h1>
             <p className="text-sm text-text-secondary leading-relaxed">{personality.bio}</p>
             {isOnboardingFlow && (
-              <p className="text-xs text-text-secondary mt-3">這是聊天後的人格摘要，正式公開自介會在你補完基本資料後生成。</p>
+              <p className="text-xs text-text-secondary mt-3">這是你的正式公開檔案，接下來首頁推薦與配對理由都會以這份資料為基礎。</p>
             )}
           </div>
         </div>
@@ -168,8 +178,8 @@ export default function PersonalityPage() {
 
       <div className="pt-4 space-y-3">
         {isOnboardingFlow ? (
-          <button className="btn-primary w-full flex items-center justify-center gap-2" onClick={() => router.push('/onboarding/profile')}>
-            繼續填寫個人資料 <ArrowRight size={18} />
+          <button className="btn-primary w-full flex items-center justify-center gap-2" onClick={() => { void handleStartMatching(); }} disabled={starting}>
+            {starting ? '準備推薦中...' : '開始探索配對'} <ArrowRight size={18} />
           </button>
         ) : (
           <button className="btn-primary w-full" onClick={() => router.push('/settings')}>

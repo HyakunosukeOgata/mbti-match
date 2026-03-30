@@ -36,10 +36,19 @@ export default function ChatClient({ matchId }: { matchId: string }) {
   const REPORT_REASONS = ['不當言行', '假帳號 / 詐騙', '騷擾或威脅', '不雅照片', '未成年', '其他'];
 
   const match = matches.find((item) => item.id === matchId);
+  const matchMeta = match as typeof match & {
+    matchReasons?: string[];
+    matchCaution?: string | null;
+    cautionSignals?: string[];
+  };
   const isMatchMember = !!match && match.users.includes(currentUser?.id || '');
   const otherUser = match?.otherUser;
   const compat = currentUser && otherUser ? (match?.compatibility || calculateCompatibility(currentUser, otherUser)) : 0;
   const insight = currentUser && otherUser ? getCompatibilityInsight(currentUser, otherUser) : null;
+  const displayedReasons = matchMeta?.matchReasons && matchMeta.matchReasons.length > 0
+    ? matchMeta.matchReasons
+    : insight?.strengths || [];
+  const displayedCaution = matchMeta?.matchCaution || matchMeta?.cautionSignals?.[0] || insight?.watchouts?.[0] || null;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -380,10 +389,13 @@ export default function ChatClient({ matchId }: { matchId: string }) {
               </div>
               <p className="text-sm font-medium mb-3">{insight.summary}</p>
               <div className="space-y-1.5 mb-3">
-                {insight.strengths.slice(0, 2).map((item) => (
+                {displayedReasons.slice(0, 3).map((item) => (
                   <p key={item} className="text-xs text-text">• {item}</p>
                 ))}
               </div>
+              {displayedCaution && (
+                <p className="text-[11px] text-text-secondary mb-3">留意一下：{displayedCaution}</p>
+              )}
               <div className="flex flex-wrap gap-2">
                 {insight.starters.map((starter) => (
                   <button

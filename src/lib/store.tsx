@@ -194,7 +194,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const photos = await loadProfilePhotos(data.id);
       const user = mapDbUserToProfile(data, photos);
       setCurrentUser(user);
-      setOnboardingStep(user.onboardingComplete ? 4 : 1);
+      setOnboardingStep(user.onboardingComplete ? 5 : user.aiPersonality ? 4 : 1);
     } catch {
       setCurrentUser(null);
       setOnboardingStep(0);

@@ -15,7 +15,15 @@ export default function AuthCallbackPage() {
       router.replace('/');
       return;
     }
-    router.replace(currentUser.onboardingComplete ? '/home' : '/onboarding/ai-chat');
+    if (currentUser.onboardingComplete) {
+      router.replace('/home');
+      return;
+    }
+    if (currentUser.aiPersonality) {
+      router.replace('/personality');
+      return;
+    }
+    router.replace('/onboarding/ai-chat');
   }, [authReady, currentUser, router]);
 
   return (

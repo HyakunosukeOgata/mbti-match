@@ -35,6 +35,8 @@ export default function LoginPage() {
     if (!authReady) return;
     if (isLoggedIn && currentUser?.onboardingComplete) {
       router.replace('/home');
+    } else if (isLoggedIn && currentUser?.aiPersonality && onboardingStep >= 4) {
+      router.replace('/personality');
     } else if (isLoggedIn && onboardingStep >= 1) {
       router.replace('/onboarding/ai-chat');
     } else {
