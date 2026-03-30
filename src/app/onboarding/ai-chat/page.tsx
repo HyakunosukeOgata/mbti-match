@@ -70,6 +70,7 @@ export default function AIOnboardingChatPage() {
             messages: [{ role: 'user', content: '你好，我剛加入 Mochi' }],
           }),
         });
+        if (!res.ok) throw new Error('API error');
         const data = await res.json();
         if (!cancelled && data.reply) {
           setMessages([{ role: 'assistant', content: data.reply }]);
@@ -117,6 +118,12 @@ export default function AIOnboardingChatPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'chat', messages: updated }),
       });
+      if (!res.ok) {
+        setError('AI 暫時無法回覆，請再試一次');
+        setMessages(prev => prev.slice(0, -1));
+        setLoading(false);
+        return;
+      }
       const data = await res.json();
       if (data.reply) {
         setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);

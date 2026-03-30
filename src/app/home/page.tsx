@@ -194,13 +194,13 @@ export default function HomePage() {
 
       {/* Cards */}
       <div className="px-6 space-y-5">
-        {dailyCards.length === 0 && (
+        {(dailyCards.length === 0 || dailyCards.filter(c => !c.skipped).length === 0) && (
           <div className="text-center py-20 animate-fade-in">
             <div className="w-24 h-24 rounded-full gradient-bg flex items-center justify-center mx-auto mb-6 animate-float" style={{ boxShadow: '0 8px 40px rgba(255, 140, 107, 0.3)' }}>
               <Sparkles size={40} color="white" />
             </div>
-            <p className="text-text font-bold text-xl mb-2">今日推薦準備中</p>
-            <p className="text-text-secondary text-sm mb-8 leading-relaxed px-4">每天為你精選默契對象<br/>你的專屬推薦馬上就來 🧡</p>
+            <p className="text-text font-bold text-xl mb-2">{dailyCards.length === 0 ? '今日推薦準備中' : '今日推薦已看完'}</p>
+            <p className="text-text-secondary text-sm mb-8 leading-relaxed px-4">{dailyCards.length === 0 ? '每天為你精選默契對象\n你的專屬推薦馬上就來 🧡' : '明天會有新的推薦，記得回來看看 🧡'}</p>
             <button className="btn-primary !w-auto !px-10 !py-3.5 animate-pulse-ring" onClick={handleRefresh} disabled={refreshing}>
               {refreshing ? '載入中...' : '✨ 載入今日推薦'}
             </button>
@@ -307,6 +307,13 @@ export default function HomePage() {
                 <div className="px-5 py-4 space-y-3">
                   {/* Bio */}
                   <p className="text-sm text-text leading-relaxed">{card.user.bio}</p>
+
+                  {/* Occupation / Education */}
+                  {(card.user.occupation || card.user.education) && (
+                    <p className="text-xs text-text-secondary">
+                      {[card.user.occupation, card.user.education].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
 
                   {/* Compat tags */}
                   <div className="flex items-center gap-2 flex-wrap">

@@ -16,7 +16,7 @@ export default function ProfilePage() {
   const router = useRouter();
 
   const [photos, setPhotos] = useState<string[]>(currentUser?.photos || []);
-  const [nickname, setNickname] = useState('');
+  const [nickname, setNickname] = useState(currentUser?.name || '');
   const [occupation, setOccupation] = useState(currentUser?.occupation || '');
   const [education, setEducation] = useState(currentUser?.education || '');
   const [birthYear, setBirthYear] = useState<number | ''>('');
@@ -29,7 +29,7 @@ export default function ProfilePage() {
   const [formError, setFormError] = useState('');
   const [nameError, setNameError] = useState('');
   const [photoError, setPhotoError] = useState('');
-  const [showCelebration, setShowCelebration] = useState(false);
+
   const [ageMin, setAgeMin] = useState(currentUser?.preferences.ageMin || 20);
   const [ageMax, setAgeMax] = useState(currentUser?.preferences.ageMax || 35);
   const [genderPref, setGenderPref] = useState<string[]>(
@@ -111,8 +111,8 @@ export default function ProfilePage() {
       e.target.value = '';
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      setPhotoError('❌ 照片不可超過 2MB');
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoError('❌ 照片不可超過 5MB');
       setTimeout(() => setPhotoError(''), 3000);
       e.target.value = '';
       return;
@@ -194,7 +194,9 @@ export default function ProfilePage() {
       });
       const data = await response.json();
       if (!response.ok || !data.personality) {
-        throw new Error(data.error || '正式檔案生成失敗');
+        setFormError(data.error || '正式檔案生成失敗，請再試一次');
+        setTimeout(() => setFormError(''), 5000);
+        return;
       }
 
       await updateProfile({
@@ -249,56 +251,19 @@ export default function ProfilePage() {
     );
   }
 
-  if (showCelebration) {
-    return (
-      <div className="min-h-dvh flex flex-col items-center justify-center px-6 relative overflow-hidden">
-        {/* Background particles */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          {[0,1,2,3,4,5,6,7].map(i => (
-            <div key={i} className="absolute text-2xl" style={{
-              top: '-10%',
-              left: `${10 + i * 12}%`,
-              animation: `confetti-fall ${3 + i * 0.4}s ease-in ${i * 0.2}s infinite`,
-            }}>
-              {['🎉','✨','💜','🎊','💫','🌟','🎈','💜'][i]}
-            </div>
-          ))}
-        </div>
 
-        <div className="text-center animate-bounce-in relative z-10">
-          <div className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6" style={{ background: 'linear-gradient(135deg, #FF8C6B, #FF6B8A)', boxShadow: '0 0 50px rgba(255, 140, 107, 0.4)' }}>
-            <span className="text-4xl">🎉</span>
-          </div>
-          <h1 className="text-3xl font-bold mb-2">
-            <span className="shimmer-text">歡迎加入 Mochi！</span>
-          </h1>
-          <p className="text-text-secondary text-sm mb-2">
-            你的個人資料已建立完成
-          </p>
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-8 animate-slide-up" style={{ background: 'rgba(255, 140, 107, 0.08)', animationDelay: '0.3s' }}>
-            <span className="text-sm font-medium">✨ {nickname || currentUser.name}</span>
-          </div>
-          <div className="space-y-3 animate-slide-up" style={{ animationDelay: '0.5s' }}>
-            <button
-              className="btn-primary flex items-center justify-center gap-2"
-              onClick={() => router.push('/home')}
-            >
-              ✨ 開始探索配對
-            </button>
-            <p className="text-xs text-text-secondary opacity-60">
-              每天為你推薦最合適的人選
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-dvh flex flex-col px-6 py-8">
       {/* Progress */}
       <div className="mb-6">
         <div className="flex justify-between items-center mb-3">
+          <button
+            onClick={() => router.push('/onboarding/ai-chat')}
+            className="text-sm text-primary font-medium"
+          >
+            ← 重新聊天
+          </button>
           <p className="text-sm font-medium text-text-secondary">👤 步驟 3/4 · 個人資料</p>
         </div>
         <div className="progress-bar">

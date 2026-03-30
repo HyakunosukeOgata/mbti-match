@@ -293,16 +293,9 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-text-secondary mb-1.5 block uppercase tracking-wider">自我介紹</label>
-                <textarea
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  rows={3}
-                  maxLength={500}
-                  placeholder="寫些什麼讓別人認識你吧..."
-                  className="resize-none"
-                />
-                <p className="text-xs text-text-secondary/50 mt-1 text-right">{bio.length}/500</p>
+                <label className="text-xs font-semibold text-text-secondary mb-1.5 block uppercase tracking-wider">自我介紹（AI 生成）</label>
+                <div className="px-4 py-3 rounded-xl bg-bg-input text-text-secondary text-sm opacity-70 cursor-not-allowed select-none leading-relaxed">{bio || '尚未生成'}</div>
+                <p className="text-xs text-text-secondary/50 mt-1">由 AI 聊天自動產出，如需更新請從「重新 AI 聊天分析」操作</p>
               </div>
               <div className="flex gap-3 pt-1">
                 <button className="btn-secondary flex-1 text-sm" onClick={() => { setPhotos(currentUser.photos); setBio(currentUser.bio); setEditName(currentUser.name); setEditOccupation(currentUser.occupation || ''); setEditEducation(currentUser.education || ''); setEditMode(false); }}>

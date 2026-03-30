@@ -281,7 +281,11 @@ export default function ChatClient({ matchId }: { matchId: string }) {
             <p className="font-semibold text-[15px] leading-tight truncate">{otherUser.name}</p>
             {otherUser.aiPersonality?.values?.[0] && <span className="personality-badge !text-[10px] !py-0 !px-1.5 shrink-0">{otherUser.aiPersonality.values[0]}</span>}
           </div>
-          <p className="text-[11px] text-text-secondary leading-tight mt-0.5">契合度 {compat}%</p>
+          <p className="text-[11px] text-text-secondary leading-tight mt-0.5">
+            {(otherUser.occupation || otherUser.education)
+              ? `${[otherUser.occupation, otherUser.education].filter(Boolean).join(' · ')} · ${compat}%`
+              : `契合度 ${compat}%`}
+          </p>
         </div>
         <button
           aria-label="安全選項"

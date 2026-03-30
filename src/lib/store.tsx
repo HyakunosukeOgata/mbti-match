@@ -467,7 +467,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       onboarding_complete: updated.onboardingComplete,
     }, { onConflict: 'auth_id' }).select('id').single();
 
-    if (error) return;
+    if (error) {
+      setCurrentUser(previousUser);
+      return;
+    }
 
     const userDbId = data?.id ?? updated.dbId;
     if (!userDbId) return;

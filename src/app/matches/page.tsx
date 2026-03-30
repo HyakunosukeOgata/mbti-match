@@ -128,6 +128,9 @@ export default function MatchesPage() {
                     <span className="personality-badge !text-[10px] !py-0.5 !px-2">{otherUser.aiPersonality.values[0]}</span>
                   )}
                 </div>
+                {(otherUser.occupation || otherUser.education) && (
+                  <p className="text-[11px] text-text-secondary truncate">{[otherUser.occupation, otherUser.education].filter(Boolean).join(' · ')}</p>
+                )}
                 <p className={`text-sm truncate ${unread ? 'text-text font-medium' : 'text-text-secondary'}`}>
                   {!lastMsg
                     ? '🎉 配對成功！開始聊天吧'
