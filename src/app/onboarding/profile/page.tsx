@@ -1,21 +1,22 @@
 'use client';
 
+import { ONBOARDING_CHAT_STORAGE_KEY, readScopedJSON, removeScopedStorage } from '@/lib/client-storage';
 import { useApp } from '@/lib/store';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import React from 'react';
 import { ArrowRight, Camera } from 'lucide-react';
 import { track } from '@/lib/analytics';
-import { moderateName } from '@/lib/moderation';
+import { moderateBio, moderateName } from '@/lib/moderation';
 import { TAIWAN_CITIES } from '@/lib/types';
 import { compressImage } from '@/lib/compressImage';
-import { clearProfileBioSource, loadProfileBioSource } from '@/lib/profile-bio-source';
 
 export default function ProfilePage() {
   const { currentUser, authReady, updateProfile, setOnboardingStep } = useApp();
   const router = useRouter();
 
   const [photos, setPhotos] = useState<string[]>(currentUser?.photos || []);
+  const [bio, setBio] = useState(currentUser?.bio || '');
   const [nickname, setNickname] = useState('');
   const [birthYear, setBirthYear] = useState<number | ''>('');
   const [birthMonth, setBirthMonth] = useState<number | ''>('');
@@ -24,12 +25,7 @@ export default function ProfilePage() {
   const [ageError, setAgeError] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | 'other'>(currentUser?.gender || 'other');
   const [region, setRegion] = useState(currentUser?.preferences.region || '');
-  const [occupation, setOccupation] = useState(currentUser?.occupation || '');
-  const [interestsInput, setInterestsInput] = useState((currentUser?.interests || []).join('、'));
-  const [heightCm, setHeightCm] = useState<number | ''>(currentUser?.heightCm || '');
-  const [weightKg, setWeightKg] = useState<number | ''>(currentUser?.weightKg || '');
-  const [education, setEducation] = useState(currentUser?.education || '');
-  const [petsInput, setPetsInput] = useState((currentUser?.pets || []).join('、'));
+  const [bioError, setBioError] = useState('');
   const [nameError, setNameError] = useState('');
   const [photoError, setPhotoError] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
@@ -43,6 +39,7 @@ export default function ProfilePage() {
   );
   const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
 
   // Calculate age whenever birth fields change
   useEffect(() => {
@@ -83,24 +80,10 @@ export default function ProfilePage() {
     if (!authReady) return;
     if (!currentUser) {
       router.replace('/');
-      return;
-    }
-    if (!currentUser.aiPersonality) {
-      router.replace('/onboarding/ai-chat');
     }
   }, [authReady, currentUser, router]);
 
-  useEffect(() => {
-    if (!showCelebration) return;
-
-    const redirectTimer = window.setTimeout(() => {
-      router.replace('/home');
-    }, 1800);
-
-    return () => window.clearTimeout(redirectTimer);
-  }, [showCelebration, router]);
-
-  if (!authReady || !currentUser || !currentUser.aiPersonality) return null;
+  if (!authReady || !currentUser) return null;
 
   const toggleGenderPref = (g: string) => {
     setGenderPref(prev => {
@@ -146,18 +129,8 @@ export default function ProfilePage() {
     setPhotos(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const handleSetMainPhoto = (idx: number) => {
-    if (idx === 0) return;
-    setPhotos(prev => {
-      const next = [...prev];
-      const [moved] = next.splice(idx, 1);
-      next.unshift(moved);
-      return next;
-    });
-  };
-
   const handleComplete = async () => {
-    if (saving) return;
+    if (saving || finalizing) return;
 
     const trimmedNickname = nickname.trim();
     if (trimmedNickname) {
@@ -168,71 +141,84 @@ export default function ProfilePage() {
         return;
       }
     }
+    if (bio.trim()) {
+      const check = moderateBio(bio);
+      if (!check.allowed) {
+        setBioError(check.reason || '內容不符合規範');
+        setTimeout(() => setBioError(''), 3000);
+        return;
+      }
+    }
     const validAge = Math.max(18, Math.min(60, age));
     const validAgeMin = Math.max(18, Math.min(60, ageMin));
     const validAgeMax = Math.max(validAgeMin, Math.min(60, ageMax));
-    const normalizedOccupation = occupation.trim().slice(0, 40);
-    const normalizedInterests = interestsInput
-      .split(/[、,，\n]/)
-      .map(item => item.trim())
-      .filter(Boolean)
-      .slice(0, 8);
-    const normalizedHeight = typeof heightCm === 'number' ? Math.max(120, Math.min(230, heightCm)) : undefined;
-    const normalizedWeight = typeof weightKg === 'number' ? Math.max(30, Math.min(200, weightKg)) : undefined;
-    const normalizedEducation = education.trim().slice(0, 40);
-    const normalizedPets = petsInput
-      .split(/[、,，\n]/)
-      .map(item => item.trim())
-      .filter(Boolean)
-      .slice(0, 6);
-    const bioSourceMessages = loadProfileBioSource();
+    const storedMessages = readScopedJSON<{ role: 'user' | 'assistant'; content: string }[]>(
+      ONBOARDING_CHAT_STORAGE_KEY,
+      currentUser.id,
+      [],
+    );
+    const finalMessages = storedMessages.length > 0
+      ? storedMessages
+      : currentUser.aiPersonality?.chatSummary
+        ? [
+            { role: 'assistant' as const, content: '這是既有聊天摘要。' },
+            { role: 'user' as const, content: currentUser.aiPersonality.chatSummary },
+          ]
+        : [];
+
+    if (finalMessages.length === 0) {
+      setBioError('請先完成和 AI 的對話，再建立正式檔案');
+      setTimeout(() => setBioError(''), 3000);
+      return;
+    }
+
     setSaving(true);
+    setFinalizing(true);
     try {
-      let generatedBio = currentUser.bio || '';
-      if (currentUser.aiPersonality) {
-        try {
-          const res = await fetch('/api/ai/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'profile-bio',
-              profile: {
-                name: trimmedNickname || currentUser.name,
-                age: validAge,
-                gender,
-                region,
-                occupation: normalizedOccupation,
-                interests: normalizedInterests,
-                heightCm: normalizedHeight,
-                weightKg: normalizedWeight,
-                education: normalizedEducation,
-                pets: normalizedPets,
-              },
-              personality: currentUser.aiPersonality,
-              messages: bioSourceMessages,
-            }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.bio) generatedBio = String(data.bio).trim();
-          }
-        } catch {
-          // Fall back to the personality summary if final bio generation fails.
-        }
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'finalize',
+          messages: finalMessages,
+          profile: {
+            nickname: nickname.trim() || currentUser.name,
+            age: validAge,
+            gender,
+            region,
+            bio,
+            ageMin: validAgeMin,
+            ageMax: validAgeMax,
+            genderPreference: genderPref,
+            preferredRegions,
+            photoCount: photos.length,
+          },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.personality) {
+        throw new Error(data.error || '正式檔案生成失敗');
       }
 
       await updateProfile({
         name: nickname.trim() || currentUser.name,
         photos,
-        bio: generatedBio,
-        occupation: normalizedOccupation,
-        interests: normalizedInterests,
-        heightCm: normalizedHeight,
-        weightKg: normalizedWeight,
-        education: normalizedEducation,
-        pets: normalizedPets,
+        bio: data.personality.bio || bio,
         age: validAge,
         gender,
+        aiPersonality: {
+          bio: data.personality.bio || '',
+          traits: data.personality.traits || [],
+          values: data.personality.values || [],
+          communicationStyle: data.personality.communicationStyle || '',
+          relationshipGoal: data.personality.relationshipGoal || '',
+          chatSummary: data.personality.chatSummary || '',
+          analyzedAt: new Date().toISOString(),
+          datingStyle: data.personality.datingStyle || '',
+          redFlags: data.personality.redFlags || [],
+          tags: data.personality.tags || [],
+          scoringFeatures: data.personality.scoringFeatures || undefined,
+        },
         preferences: {
           ageMin: validAgeMin,
           ageMax: validAgeMax,
@@ -240,18 +226,29 @@ export default function ProfilePage() {
           region,
           preferredRegions: preferredRegions.length > 0 ? preferredRegions : undefined,
         },
-        onboardingComplete: true,
       });
+      removeScopedStorage([ONBOARDING_CHAT_STORAGE_KEY], currentUser.id);
       setOnboardingStep(4);
-      track('onboarding_complete');
-      clearProfileBioSource();
-      setShowCelebration(true);
+      router.push('/personality');
     } finally {
       setSaving(false);
+      setFinalizing(false);
     }
   };
 
   const avatarColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD'];
+
+  if (finalizing) {
+    return (
+      <div className="min-h-dvh flex flex-col items-center justify-center px-6">
+        <div className="w-20 h-20 rounded-full flex items-center justify-center mb-5" style={{ background: 'linear-gradient(135deg, #FF8C6B, #FF6B8A)' }}>
+          <span className="text-3xl">✨</span>
+        </div>
+        <h2 className="text-xl font-bold mb-2">正在整理你的正式檔案</h2>
+        <p className="text-text-secondary text-sm text-center">Mochi 正在把聊天內容、個人資料與偏好整合成完整介紹與配對線索...</p>
+      </div>
+    );
+  }
 
   if (showCelebration) {
     return (
@@ -285,12 +282,12 @@ export default function ProfilePage() {
           <div className="space-y-3 animate-slide-up" style={{ animationDelay: '0.5s' }}>
             <button
               className="btn-primary flex items-center justify-center gap-2"
-              onClick={() => router.replace('/home')}
+              onClick={() => router.push('/home')}
             >
               ✨ 開始探索配對
             </button>
             <p className="text-xs text-text-secondary opacity-60">
-              正在為你帶往首頁，開始探索配對
+              每天為你推薦最合適的人選
             </p>
           </div>
         </div>
@@ -303,10 +300,10 @@ export default function ProfilePage() {
       {/* Progress */}
       <div className="mb-6">
         <div className="flex justify-between items-center mb-3">
-          <p className="text-sm font-medium text-text-secondary">👤 步驟 4/4 · 個人資料</p>
+          <p className="text-sm font-medium text-text-secondary">👤 步驟 3/4 · 個人資料</p>
         </div>
         <div className="progress-bar">
-          <div className="progress-bar-fill" style={{ width: '100%' }} />
+          <div className="progress-bar-fill" style={{ width: '75%' }} />
         </div>
       </div>
 
@@ -320,17 +317,9 @@ export default function ProfilePage() {
                 <img src={photo} alt={`照片 ${idx + 1}`} className="w-full h-full object-cover" />
                 <button
                   onClick={() => handleRemovePhoto(idx)}
-                  className="absolute -top-1 -right-1 w-8 h-8 min-w-[44px] min-h-[44px] rounded-full bg-black/50 text-white text-xs flex items-center justify-center"
+                  className="absolute -top-1 -right-1 w-[44px] h-[44px] rounded-full bg-black/50 text-white text-xs flex items-center justify-center"
                   aria-label={`刪除照片 ${idx + 1}`}
                 >✕</button>
-                {idx === 0 ? (
-                  <span className="absolute bottom-1.5 left-1.5 text-[10px] font-bold text-white bg-black/50 px-2 py-0.5 rounded-full">主照片</span>
-                ) : (
-                  <button
-                    onClick={() => handleSetMainPhoto(idx)}
-                    className="absolute bottom-1.5 left-1.5 text-[10px] font-medium text-white bg-black/40 active:bg-primary px-2 py-0.5 rounded-full transition-colors"
-                  >設為主照</button>
-                )}
               </div>
             ))}
             {photos.length < MAX_PHOTOS && (
@@ -441,89 +430,17 @@ export default function ProfilePage() {
         </div>
 
         <div>
-          <label className="text-sm font-medium text-text-secondary mb-2 block">💼 職業</label>
-          <input
-            type="text"
-            value={occupation}
-            onChange={(e) => setOccupation(e.target.value)}
-            placeholder="例如：產品經理、設計師、工程師"
-            maxLength={40}
-          />
-          <p className="text-xs text-text-secondary mt-1 opacity-60">這會一起帶進最後的正式自介。</p>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium text-text-secondary mb-2 block">🎨 興趣 / 日常</label>
+          <label className="text-sm font-medium text-text-secondary mb-2 block">✍️ 自我介紹</label>
           <textarea
-            value={interestsInput}
-            onChange={(e) => setInterestsInput(e.target.value)}
-            placeholder="例如：做菜、看展、羽球、爬山、咖啡廳巡禮"
-            rows={3}
-            maxLength={120}
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            placeholder="說說你自己吧！興趣、個性、對生活的態度...讓別人更認識你 💜"
+            rows={4}
+            maxLength={500}
+            className="resize-none"
           />
-          <p className="text-xs text-text-secondary mt-1 opacity-60">用「、」或逗號分隔都可以，填越具體越像真人。</p>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium text-text-secondary mb-2 block">📏 身高 / 體重</label>
-          <div className="flex items-center gap-3">
-            <input
-              type="number"
-              value={heightCm}
-              onChange={(e) => setHeightCm(e.target.value ? Number(e.target.value) : '')}
-              placeholder="身高"
-              min={120}
-              max={230}
-              className="w-28 text-center"
-            />
-            <span className="text-sm text-text-secondary">cm</span>
-            <input
-              type="number"
-              value={weightKg}
-              onChange={(e) => setWeightKg(e.target.value ? Number(e.target.value) : '')}
-              placeholder="體重"
-              min={30}
-              max={200}
-              className="w-28 text-center"
-            />
-            <span className="text-sm text-text-secondary">kg</span>
-          </div>
-          <p className="text-xs text-text-secondary mt-1 opacity-60">只會在真的自然時才少量融入自介，不會硬寫成規格表。</p>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium text-text-secondary mb-2 block">🎓 學歷</label>
-          <input
-            type="text"
-            value={education}
-            onChange={(e) => setEducation(e.target.value)}
-            placeholder="例如：大學、研究所、設計相關科系"
-            maxLength={40}
-          />
-        </div>
-
-        <div>
-          <label className="text-sm font-medium text-text-secondary mb-2 block">🐶 寵物</label>
-          <input
-            type="text"
-            value={petsInput}
-            onChange={(e) => setPetsInput(e.target.value)}
-            placeholder="例如：一隻米克斯、一隻橘貓、目前沒有"
-            maxLength={80}
-          />
-          <p className="text-xs text-text-secondary mt-1 opacity-60">如果有寵物，這類資訊通常很適合讓自介更有溫度。</p>
-        </div>
-
-        <div className="card !border-none" style={{ background: 'linear-gradient(135deg, rgba(255, 140, 107, 0.06), rgba(255, 107, 107, 0.04))' }}>
-          <p className="text-sm font-medium text-text-secondary mb-2">✍️ 正式自介會在你送出這頁後才生成</p>
-          <p className="text-sm text-text-secondary leading-relaxed">
-            小默會先保留你剛剛的聊天內容，等你填完名字、性別、年齡、地區、職業與興趣後，再一起整理成更像真人寫的正式自介。
-          </p>
-          {currentUser.aiPersonality?.bio && (
-            <div className="mt-3 rounded-2xl p-3" style={{ background: 'rgba(255,255,255,0.55)' }}>
-              <p className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1">目前人格摘要</p>
-              <p className="text-sm leading-relaxed">{currentUser.aiPersonality.bio}</p>
-            </div>
+          {bioError && (
+            <p className="text-red-500 text-xs mt-1">{bioError}</p>
           )}
         </div>
 
@@ -616,9 +533,9 @@ export default function ProfilePage() {
         <button
           className="btn-primary flex items-center justify-center gap-2"
           onClick={handleComplete}
-          disabled={saving || photos.length === 0 || !isBirthdateComplete || !!ageError || !region}
+          disabled={saving || !bio.trim() || photos.length === 0 || !isBirthdateComplete || !!ageError || !region}
         >
-          {saving ? '正在生成自介...' : '完成設定，開始配對！🚀'}
+          {saving ? '儲存中...' : '完成設定，生成我的默契檔案 ✨'}
         </button>
       </div>
     </div>

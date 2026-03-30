@@ -1,90 +1,62 @@
 'use client';
 
+import { ONBOARDING_CHAT_STORAGE_KEY, readScopedJSON, removeScopedStorage, writeScopedJSON } from '@/lib/client-storage';
 import { useApp } from '@/lib/store';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, Sparkles, Loader2 } from 'lucide-react';
 import { track } from '@/lib/analytics';
-import { clearProfileBioSource, saveProfileBioSource } from '@/lib/profile-bio-source';
 
 interface ChatMsg {
   role: 'user' | 'assistant';
   content: string;
 }
 
-const CHAT_STORAGE_KEY = 'mochi_onboarding_chat';
-
-function loadSavedChat(): { messages: ChatMsg[]; readyToAnalyze: boolean } | null {
-  try {
-    const raw = localStorage.getItem(CHAT_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed.messages) && parsed.messages.length > 0) return parsed;
-  } catch { /* ignore */ }
-  return null;
-}
-
-function saveChatToStorage(messages: ChatMsg[], readyToAnalyze: boolean) {
-  try {
-    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({ messages, readyToAnalyze }));
-  } catch { /* ignore */ }
-}
-
 export default function AIOnboardingChatPage() {
   const { currentUser, authReady, updateProfile, setOnboardingStep } = useApp();
   const router = useRouter();
+  const [isResetMode, setIsResetMode] = useState(false);
 
-  const saved = useRef(loadSavedChat());
-  const [messages, setMessages] = useState<ChatMsg[]>(saved.current?.messages || []);
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [startTime] = useState(Date.now());
   const [error, setError] = useState('');
-  const [readyToAnalyze, setReadyToAnalyze] = useState(saved.current?.readyToAnalyze || false);
+  const [readyToAnalyze, setReadyToAnalyze] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const resetChat = useCallback(() => {
-    try {
-      localStorage.removeItem(CHAT_STORAGE_KEY);
-    } catch {
-      // ignore storage failures
-    }
-    clearProfileBioSource();
-    setMessages([]);
-    setInput('');
-    setError('');
-    setReadyToAnalyze(false);
-    setLoading(false);
-    setAnalyzing(false);
-  }, []);
-
   const userMessageCount = messages.filter(m => m.role === 'user').length;
-
-  // Persist chat to localStorage on every change
-  useEffect(() => {
-    if (messages.length > 0) saveChatToStorage(messages, readyToAnalyze);
-  }, [messages, readyToAnalyze]);
 
   useEffect(() => {
     if (!authReady) return;
     if (!currentUser) {
       router.replace('/');
     }
+    // In reset mode, skip onboarding redirect even if onboarding is complete
   }, [authReady, currentUser, router]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('mode') !== 'reset') return;
-    resetChat();
-    router.replace('/onboarding/ai-chat');
-  }, [resetChat, router]);
+    setIsResetMode(new URLSearchParams(window.location.search).get('mode') === 'reset');
+  }, []);
 
   // Get initial AI greeting
   useEffect(() => {
-    if (messages.length > 0) return;
+    if (!currentUser?.id || messages.length > 0) return;
+
+    if (isResetMode) {
+      removeScopedStorage([ONBOARDING_CHAT_STORAGE_KEY], currentUser.id);
+    } else {
+      const stored = readScopedJSON<ChatMsg[]>(ONBOARDING_CHAT_STORAGE_KEY, currentUser.id, []);
+      if (stored.length > 0) {
+        setMessages(stored);
+        setReadyToAnalyze(stored.filter((msg) => msg.role === 'user').length >= 5);
+        return;
+      }
+    }
+
     let cancelled = false;
 
     async function greet() {
@@ -98,20 +70,15 @@ export default function AIOnboardingChatPage() {
             messages: [{ role: 'user', content: '你好，我剛加入 Mochi' }],
           }),
         });
-        if (!res.ok) throw new Error('API error');
         const data = await res.json();
-        if (!cancelled) {
-          if (data.reply) {
-            setMessages([{ role: 'assistant', content: data.reply }]);
-          } else {
-            throw new Error('Missing greeting reply');
-          }
+        if (!cancelled && data.reply) {
+          setMessages([{ role: 'assistant', content: data.reply }]);
         }
       } catch {
         if (!cancelled) {
           setMessages([{
             role: 'assistant',
-            content: '嗨！我是小默 ✨ 歡迎來到 Mochi！在開始配對之前，我想先跟你聊聊天，好更了解你。放輕鬆，就像跟朋友聊天一樣～\n\n先跟我說說，你平常最喜歡做什麼？',
+            content: '嗨！我是小默 ✨ 歡迎來到 Mochi！在開始配對之前，我想先跟你聊聊天，好幫你寫一段超棒的自我介紹。放輕鬆，就像跟朋友聊天一樣～\n\n先跟我說說，你平常最喜歡做什麼？',
           }]);
         }
       } finally {
@@ -122,27 +89,20 @@ export default function AIOnboardingChatPage() {
     greet();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentUser?.id, isResetMode, messages.length]);
+
+  useEffect(() => {
+    if (!currentUser?.id || messages.length === 0) return;
+    writeScopedJSON(ONBOARDING_CHAT_STORAGE_KEY, currentUser.id, messages);
+  }, [messages, currentUser?.id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  useEffect(() => {
-    if (messages.length === 0 || analyzing) return undefined;
-
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [analyzing, messages.length]);
-
   const sendMessage = useCallback(async () => {
     const text = input.trim();
-    if (!text || loading || analyzing || readyToAnalyze) return;
+    if (!text || loading) return;
 
     setInput('');
     setError('');
@@ -157,15 +117,12 @@ export default function AIOnboardingChatPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'chat', messages: updated }),
       });
-      if (!res.ok) throw new Error('API error');
       const data = await res.json();
       if (data.reply) {
         setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
         if (data.readyToAnalyze) {
           setReadyToAnalyze(true);
         }
-      } else {
-        setError('小默暫時無法回覆，請再試一次');
       }
     } catch {
       setError('網路不穩，請再試一次');
@@ -173,54 +130,69 @@ export default function AIOnboardingChatPage() {
       setLoading(false);
       inputRef.current?.focus();
     }
-  }, [analyzing, input, loading, messages, readyToAnalyze]);
+  }, [input, loading, messages]);
 
   const finishChat = useCallback(async () => {
-    if (analyzing) return;
+    if (analyzing || !currentUser) return;
+
+    if (!isResetMode) {
+      writeScopedJSON(ONBOARDING_CHAT_STORAGE_KEY, currentUser.id, messages);
+      track('ai_chat_complete', {
+        messageCount: userMessageCount,
+        seconds: Math.round((Date.now() - startTime) / 1000),
+      });
+      setOnboardingStep(2);
+      router.push('/onboarding/profile');
+      return;
+    }
+
     setAnalyzing(true);
 
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'analyze', messages }),
+        body: JSON.stringify({
+          action: 'finalize',
+          messages,
+          profile: {
+            nickname: currentUser.name,
+            age: currentUser.age,
+            gender: currentUser.gender,
+            region: currentUser.preferences.region,
+            bio: currentUser.bio,
+            ageMin: currentUser.preferences.ageMin,
+            ageMax: currentUser.preferences.ageMax,
+            genderPreference: currentUser.preferences.genderPreference,
+            preferredRegions: currentUser.preferences.preferredRegions || [],
+            photoCount: currentUser.photos.length,
+          },
+        }),
       });
-      if (!res.ok) throw new Error('API error');
       const data = await res.json();
 
       if (data.personality) {
         const elapsed = Math.round((Date.now() - startTime) / 1000);
         track('ai_chat_complete', { messageCount: userMessageCount, seconds: elapsed });
 
-        const p = data.personality;
-        const pp = p.personality_profile || {};
-        const sf = p.scoring_features || {};
-
         await updateProfile({
           aiPersonality: {
-            bio: p.bio || '',
-            traits: pp.traits || p.traits || [],
-            values: pp.values || p.values || [],
-            datingStyle: p.dating_style || '',
-            communicationStyle: p.communication_style || p.communicationStyle || '',
-            relationshipGoal: p.relationship_goal || p.relationshipGoal || '',
-            redFlags: p.red_flags || [],
-            tags: p.tags || [],
-            scoringFeatures: {
-              attachmentStyle: sf.attachmentStyle || 'mixed',
-              socialEnergy: sf.socialEnergy ?? 50,
-              conflictStyle: sf.conflictStyle || 'collaborator',
-              loveLanguage: sf.loveLanguage || '',
-              lifePace: sf.lifePace || 'moderate',
-              emotionalDepth: sf.emotionalDepth ?? 50,
-            },
-            chatSummary: p.chatSummary || '',
+            bio: data.personality.bio || '',
+            traits: data.personality.traits || [],
+            values: data.personality.values || [],
+            communicationStyle: data.personality.communicationStyle || '',
+            relationshipGoal: data.personality.relationshipGoal || '',
+            chatSummary: data.personality.chatSummary || '',
             analyzedAt: new Date().toISOString(),
+            datingStyle: data.personality.datingStyle || '',
+            redFlags: data.personality.redFlags || [],
+            tags: data.personality.tags || [],
+            scoringFeatures: data.personality.scoringFeatures || undefined,
           },
+          bio: data.personality.bio || currentUser.bio || '',
         });
-        setOnboardingStep(3);
-        saveProfileBioSource(messages);
-        try { localStorage.removeItem(CHAT_STORAGE_KEY); } catch { /* ignore */ }
+        removeScopedStorage([ONBOARDING_CHAT_STORAGE_KEY], currentUser.id);
+
         router.push('/personality');
       } else {
         setError('分析失敗，請再試一次');
@@ -230,18 +202,7 @@ export default function AIOnboardingChatPage() {
     } finally {
       setAnalyzing(false);
     }
-  }, [analyzing, messages, startTime, userMessageCount, updateProfile, setOnboardingStep, router]);
-
-  const retryLastStep = useCallback(() => {
-    setError('');
-    if (readyToAnalyze) {
-      void finishChat();
-      return;
-    }
-    if (input.trim()) {
-      void sendMessage();
-    }
-  }, [finishChat, input, readyToAnalyze, sendMessage]);
+  }, [analyzing, currentUser, isResetMode, messages, router, setOnboardingStep, startTime, updateProfile, userMessageCount]);
 
   if (!authReady || !currentUser) return null;
 
@@ -255,7 +216,7 @@ export default function AIOnboardingChatPage() {
         </div>
         <h2 className="text-xl font-bold mb-2 animate-fade-in">正在分析你的個性 ✨</h2>
         <p className="text-text-secondary text-sm text-center animate-fade-in">
-          正在根據我們的聊天整理你的個性摘要...
+          AI 正在根據我們的聊天生成你的專屬介紹...
         </p>
         <div className="mt-6 w-48">
           <div className="progress-bar">
@@ -271,15 +232,15 @@ export default function AIOnboardingChatPage() {
       {/* Header */}
       <div className="px-6 pt-6 pb-3">
         <div className="flex justify-between items-center mb-3">
-          <p className="text-sm font-medium text-text-secondary">💬 步驟 2/4 · 聊聊天</p>
+          <p className="text-sm font-medium text-text-secondary">{isResetMode ? '🔄 重新分析個性' : '💬 步驟 2/3 · AI 聊聊'}</p>
         </div>
         <div className="progress-bar">
-          <div className="progress-bar-fill" style={{ width: readyToAnalyze ? '50%' : `${25 + Math.min(userMessageCount * 3, 25)}%` }} />
+          <div className="progress-bar-fill" style={{ width: readyToAnalyze ? '66%' : `${33 + Math.min(userMessageCount * 4, 28)}%` }} />
         </div>
         <p className="text-xs text-text-secondary mt-2">
           {readyToAnalyze
-            ? '✅ 小默已經了解你了！點下方按鈕完成分析'
-            : '跟小默聊聊天，讓我們更了解你'}
+            ? isResetMode ? '✅ 小默已經重新了解你了！點下方按鈕更新檔案' : '✅ 小默已經了解你了！接著補完個人資料'
+            : '跟小默聊聊天，讓 AI 認識你'}
         </p>
       </div>
 
@@ -301,7 +262,7 @@ export default function AIOnboardingChatPage() {
                 borderBottomLeftRadius: msg.role !== 'user' ? '6px' : undefined,
               }}
             >
-              <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+              {msg.content}
             </div>
           </div>
         ))}
@@ -323,15 +284,6 @@ export default function AIOnboardingChatPage() {
       {error && (
         <div className="px-4 py-2">
           <p className="text-xs text-danger text-center">{error}</p>
-          {(readyToAnalyze || input.trim()) && (
-            <button
-              className="mx-auto mt-2 block text-xs font-medium text-text-secondary underline underline-offset-2"
-              onClick={retryLastStep}
-              disabled={loading || analyzing}
-            >
-              再試一次
-            </button>
-          )}
         </div>
       )}
 
@@ -342,10 +294,9 @@ export default function AIOnboardingChatPage() {
             className="btn-primary mb-3 flex items-center justify-center gap-2"
             onClick={finishChat}
             disabled={analyzing}
-            data-testid="onboarding-finish-chat"
           >
             <Sparkles size={16} />
-            完成聊天，整理我的摘要 ✨
+            {isResetMode ? '重新整理我的檔案 ✨' : '進入個人資料設定 ✨'}
           </button>
         )}
         <div className="flex gap-2">
@@ -353,20 +304,17 @@ export default function AIOnboardingChatPage() {
             ref={inputRef}
             type="text"
             className="input flex-1"
-            placeholder={readyToAnalyze ? '小默已經了解你了，點上方按鈕整理摘要' : '說點什麼...'}
+            placeholder="說點什麼..."
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) sendMessage(); }}
-            disabled={loading || readyToAnalyze}
-            maxLength={500}
+            disabled={loading}
             autoComplete="off"
-            data-testid="onboarding-chat-input"
           />
           <button
             className="btn-primary !w-11 !h-11 !p-0 flex items-center justify-center flex-shrink-0"
             onClick={sendMessage}
-            disabled={!input.trim() || loading || readyToAnalyze}
-            data-testid="onboarding-send-button"
+            disabled={!input.trim() || loading}
           >
             {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
           </button>

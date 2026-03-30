@@ -2,35 +2,29 @@
 // Mochi 默契 - Type Definitions
 // ============================
 
-// AI 對話分析產生的人格向量
-export interface AIPersonality {
-  bio: string;                  // AI 整理的人格摘要，正式公開自介在 profile 完成後生成
-  // --- Personality Profile ---
-  traits: PersonalityTrait[];   // 人格特質標籤
-  values: string[];             // 核心價值觀 (e.g. '真誠', '自由', '成長')
-  // --- Dating Style ---
-  datingStyle?: string;          // 交往風格描述 (e.g. '慢熱穩定型', '熱情主動型')
-  // --- Communication ---
-  communicationStyle: string;   // 溝通風格描述
-  // --- Relationship ---
-  relationshipGoal: string;     // 關係期待描述
-  // --- Red Flags ---
-  redFlags?: string[];           // 用戶明確表達的地雷 (e.g. '不回訊息', '情緒勒索')
-  // --- Tags & Features ---
-  tags?: string[];               // 快速識別標籤 (e.g. '#慢熱', '#重視獨處', '#戶外派')
-  scoringFeatures?: ScoringFeatures; // 結構化評分特徵
-  // --- Internal ---
-  chatSummary: string;          // AI 對話摘要（內部用，不公開）
-  analyzedAt: string;           // ISO date
+// 配對算法用評分維度
+export interface ScoringFeatures {
+  attachmentStyle: 'secure' | 'anxious' | 'avoidant' | 'mixed';
+  socialEnergy: number;         // 0-100
+  conflictStyle: 'confronter' | 'avoider' | 'collaborator' | 'compromiser';
+  loveLanguage: string;
+  lifePace: 'slow' | 'moderate' | 'fast';
+  emotionalDepth: number;       // 0-100
 }
 
-export interface ScoringFeatures {
-  attachmentStyle: 'secure' | 'anxious' | 'avoidant' | 'mixed';  // 依附風格
-  socialEnergy: number;         // 社交能量 0-100 (0=極度內向, 100=極度外向)
-  conflictStyle: 'confronter' | 'avoider' | 'collaborator' | 'compromiser';  // 衝突處理
-  loveLanguage: string;         // 主要愛的語言
-  lifePace: 'slow' | 'moderate' | 'fast';  // 生活節奏
-  emotionalDepth: number;       // 情感深度 0-100
+// AI 對話分析產生的人格向量
+export interface AIPersonality {
+  bio: string;                  // AI 生成的自我介紹
+  traits: PersonalityTrait[];   // 人格特質標籤
+  values: string[];             // 核心價值觀 (e.g. '真誠', '自由', '成長')
+  communicationStyle: string;   // 溝通風格描述
+  relationshipGoal: string;     // 關係期待描述
+  chatSummary: string;          // AI 對話摘要（內部用，不公開）
+  analyzedAt: string;           // ISO date
+  datingStyle?: string;         // 交往風格
+  redFlags?: string[];          // 地雷/在意的事
+  tags?: string[];              // 快速標籤
+  scoringFeatures?: ScoringFeatures; // 配對算法評分維度
 }
 
 export interface PersonalityTrait {
@@ -48,12 +42,6 @@ export interface UserProfile {
   profileVisible?: boolean;
   gender: 'male' | 'female' | 'other';
   bio: string;
-  occupation?: string;
-  interests?: string[];
-  heightCm?: number;
-  weightKg?: number;
-  education?: string;
-  pets?: string[];
   photos: string[];
   aiPersonality?: AIPersonality;
   preferences: {
@@ -63,13 +51,7 @@ export interface UserProfile {
     region: string;
     preferredRegions?: string[];  // multi-select: cities user wants to match with
     hiddenMatchIds?: string[];
-    notificationPrefs?: {
-      matches: boolean;
-      messages: boolean;
-      likes: boolean;
-      weekly: boolean;
-      system: boolean;
-    };
+    notificationPrefs?: Record<string, boolean>; // notification toggle states
   };
   onboardingComplete: boolean;
   createdAt: string;
@@ -83,7 +65,8 @@ export interface DailyCard {
   liked: boolean;
   skipped?: boolean;
   topicAnswer?: string;
-  recommendationReasons?: { reasons: string[]; caution: string | null } | null;
+  matchReasons?: string[];
+  matchCaution?: string | null;
   matchedSignals?: string[];
   cautionSignals?: string[];
 }
@@ -104,6 +87,10 @@ export interface Match {
   status: 'active' | 'expired' | 'removed';
   otherUser?: UserProfile;
   compatibility?: number;
+  matchReasons?: string[];
+  matchCaution?: string | null;
+  matchedSignals?: string[];
+  cautionSignals?: string[];
 }
 
 export interface ChatMessage {
