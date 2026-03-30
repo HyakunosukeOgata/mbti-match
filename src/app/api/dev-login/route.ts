@@ -4,7 +4,7 @@ import { ensureDemoLogin } from '@/lib/demo-admin-rest';
 export async function POST(req: NextRequest) {
   if (process.env.NODE_ENV === 'production') {
     const testCode = req.headers.get('x-test-code') || '';
-    const expected = process.env.ADMIN_CODE_HASH || '';
+    const expected = process.env.NEXT_PUBLIC_ADMIN_HASH || '';
     if (!testCode || !expected) {
       return NextResponse.json({ error: 'Not available' }, { status: 404 });
     }

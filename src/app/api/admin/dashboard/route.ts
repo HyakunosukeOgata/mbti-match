@@ -39,7 +39,7 @@ function hashCode(code: string) {
 
 function isAuthorized(req: NextRequest) {
   const code = req.headers.get('x-admin-code') || '';
-  const expected = process.env.ADMIN_CODE_HASH || '';
+  const expected = process.env.NEXT_PUBLIC_ADMIN_HASH || '';
   if (!code || !expected) return false;
   const hashBuf = Buffer.from(hashCode(code));
   const expectedBuf = Buffer.from(expected);
