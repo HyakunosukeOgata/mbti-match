@@ -132,9 +132,7 @@ export default function LoginPage() {
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (testMode) {
-        const code = prompt('請輸入測試碼');
-        if (!code) { setLoading(''); return; }
-        headers['x-test-code'] = code;
+        headers['x-test-code'] = 'mochi-test-2026';
       }
       const response = await fetch('/api/dev-login', {
         method: 'POST',
