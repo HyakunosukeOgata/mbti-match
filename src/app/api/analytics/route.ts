@@ -10,7 +10,8 @@ type AnalyticsPayload = {
 
 const VALID_EVENTS = new Set([
   'page_view', 'login', 'logout', 'onboarding_start', 'onboarding_complete',
-  'mbti_reset', 'ai_chat_reset', 'card_like', 'card_skip', 'match_created', 'chat_message_sent',
+  'onboarding_profile_completed', 'mbti_reset', 'ai_chat_reset', 'recommendations_loaded',
+  'card_like', 'card_skip', 'match_created', 'first_message_sent', 'chat_message_sent',
   'chat_image_sent', 'profile_updated', 'pwa_install_prompt', 'pwa_installed',
   'apple_sign_in', 'report_user',
 ]);

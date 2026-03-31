@@ -403,6 +403,9 @@ export default function SettingsPage() {
               <p className="text-xs text-text-secondary">
                 💡 暫停檔案後，你的現有配對和聊天不會受影響，只是不會出現在新的推薦中。
               </p>
+              <p className="text-xs text-text-secondary mt-2">
+                AI 聊天內容會被用來整理你的公開介紹與配對線索，但不會把原始對話逐字公開給其他人。你可以隨時重新分析，或直接調整檔案可見設定。
+              </p>
             </div>
           </div>
         </div>

@@ -235,6 +235,11 @@ export default function ProfilePage() {
           preferredRegions: preferredRegions.length > 0 ? preferredRegions : undefined,
         },
       });
+      track('onboarding_profile_completed', {
+        photoCount: photos.length,
+        hasOccupation: Boolean(trimmedOccupation),
+        hasEducation: Boolean(trimmedEducation),
+      });
       removeScopedStorage([ONBOARDING_CHAT_STORAGE_KEY], currentUser.id);
       setOnboardingStep(4);
       router.push('/personality');
@@ -277,6 +282,15 @@ export default function ProfilePage() {
           <div className="progress-bar-fill" style={{ width: '75%' }} />
         </div>
         <p className="text-xs text-text-secondary mt-2">這一步只補基本資料，像職業、學歷這類結構化資訊；公開自介會交給前面的 AI 對話來整理。</p>
+      </div>
+
+      <div className="card !border-none mb-5" style={{ background: 'linear-gradient(135deg, rgba(255, 140, 107, 0.06), rgba(255, 107, 138, 0.05))' }}>
+        <p className="text-sm font-semibold mb-2">🔒 你提供的資料會怎麼被使用</p>
+        <div className="space-y-1.5 text-xs text-text-secondary leading-relaxed">
+          <p>公開給其他人的內容：暱稱、照片、年齡、地區、AI 整理後的個人介紹。</p>
+          <p>只用來優化推薦的內容：聊天內容、配對偏好與互動訊號，不會原樣公開給其他人。</p>
+          <p>你之後可以在設定裡調整檔案可見性、是否隱藏年齡，以及重新整理 AI 分析。</p>
+        </div>
       </div>
 
       <div className="flex-1 space-y-6 overflow-y-auto pb-20">

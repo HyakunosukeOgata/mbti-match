@@ -26,6 +26,7 @@ export default function AIOnboardingChatPage() {
   const [readyToAnalyze, setReadyToAnalyze] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const trackedStartRef = useRef(false);
 
   const userMessageCount = messages.filter(m => m.role === 'user').length;
 
@@ -41,6 +42,12 @@ export default function AIOnboardingChatPage() {
     if (typeof window === 'undefined') return;
     setIsResetMode(new URLSearchParams(window.location.search).get('mode') === 'reset');
   }, []);
+
+  useEffect(() => {
+    if (!currentUser?.id || isResetMode || trackedStartRef.current) return;
+    track('onboarding_start');
+    trackedStartRef.current = true;
+  }, [currentUser?.id, isResetMode]);
 
   // Get initial AI greeting
   useEffect(() => {
@@ -249,7 +256,7 @@ export default function AIOnboardingChatPage() {
         <p className="text-xs text-text-secondary mt-2">
           {readyToAnalyze
             ? isResetMode ? '✅ 小默已經重新了解你了！點下方按鈕更新檔案' : '✅ 小默已經了解你了！接著補完個人資料'
-            : '跟小默聊聊天，讓 AI 認識你'}
+            : '通常聊 5-6 次有內容的回覆就能完成，放心，不會變成沒完沒了的問答。'}
         </p>
       </div>
 

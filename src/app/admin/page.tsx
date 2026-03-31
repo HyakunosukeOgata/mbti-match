@@ -517,6 +517,17 @@ export default function AdminPage() {
     const now = Date.now();
     const today = events.filter((event) => now - new Date(event.ts).getTime() < 86400000);
     const week = events.filter((event) => now - new Date(event.ts).getTime() < 604800000);
+    const funnelCount = (eventName: string) => week.filter((event) => event.name === eventName).length;
+    const funnel = [
+      { label: '開始 onboarding', value: funnelCount('onboarding_start') },
+      { label: '完成 AI 聊天', value: funnelCount('ai_chat_complete') },
+      { label: '完成個資', value: funnelCount('onboarding_profile_completed') },
+      { label: '完成 onboarding', value: funnelCount('onboarding_complete') },
+      { label: '推薦載入', value: funnelCount('recommendations_loaded') },
+      { label: '送出喜歡', value: funnelCount('card_like') },
+      { label: '成功配對', value: funnelCount('match_created') },
+      { label: '首則訊息', value: funnelCount('first_message_sent') },
+    ];
 
     const countByName = (list: AnalyticsEvent[]) => {
       const map: Record<string, number> = {};
@@ -530,6 +541,15 @@ export default function AdminPage() {
           <StatCard icon={<Clock size={22} />} label="今日事件" value={today.length} color="#FF8C6B" />
           <StatCard icon={<TrendingUp size={22} />} label="本週事件" value={week.length} color="#0D9668" />
           <StatCard icon={<BarChart3 size={22} />} label="總事件" value={events.length} color="#6366F1" />
+        </div>
+
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>核心漏斗（本週）</h3>
+          <div style={styles.statsGrid}>
+            {funnel.map((item) => (
+              <StatCard key={item.label} icon={<TrendingUp size={22} />} label={item.label} value={item.value} color="#FF8C6B" />
+            ))}
+          </div>
         </div>
 
         <div style={styles.section}>

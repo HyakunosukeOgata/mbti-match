@@ -288,7 +288,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     const result = await authorizedJsonFetch<{ cards: DailyCard[] }>('/api/social/cards', accessToken);
-    setDailyCards(result?.cards || []);
+    const cards = result?.cards || [];
+    setDailyCards(cards);
+    track('recommendations_loaded', {
+      count: cards.length,
+      hasCards: cards.length > 0,
+    });
   }, []);
 
   useEffect(() => {
@@ -571,6 +576,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setMatches((prev) => prev.map((match) => match.id === matchId
       ? { ...match, messages: [...match.messages, optimisticMessage] }
       : match));
+
+    if ((activeMatch?.messages.length || 0) === 0) {
+      track('first_message_sent', {
+        matchId,
+        hasImage: Boolean(imageUrl),
+      });
+    }
 
     track(imageUrl ? 'chat_image_sent' : 'chat_message_sent');
     const result = await authorizedJsonFetch<{ message: Match['messages'][number] }>('/api/social/messages', accessToken, {
